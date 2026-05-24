@@ -1,0 +1,39 @@
+name: Game Test
+
+on:
+  pull_request:
+    paths:
+      - 'game/**'
+      - 'client/**'
+      - '.github/workflows/game_test.yml'
+
+jobs:
+  game-test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python env
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.12
+
+      - name: Install Game/Client dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ./game/ -e ./client/
+
+      - name: Run game tests
+        run: pytest ./game/tests/GameMaster_test.py
+      
+      - name: RUN feature/set-number-of-matches tests
+        run: |
+          pytest ./test_scripts/set_number_of_matches/pytest/unit_test.py
+          pytest ./test_scripts/set_number_of_matches/pytest/integration_test.py
+
+      - name: Run log tests
+        run: |
+          pytest ./game/tests/JsonLog_integration.py
+          pytest ./game/tests/JsonLog_unit.py

@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# 仮想環境
+.venv/
+venv/
+env/
+env_*/
+*venv/
+.env
+
+# パッケージ・ビルド成果物
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+MANIFEST
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+coverage.xml
+
+# mypy / 型チェック
+.mypy_cache/
+.dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ログ
+/logs/
+/log/
+
+*.log
+
+# 個人メモ
+
+memo
+

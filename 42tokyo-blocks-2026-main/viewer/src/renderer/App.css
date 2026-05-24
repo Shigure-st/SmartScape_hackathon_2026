@@ -1,0 +1,90 @@
+/*
+ * @NOTE: Prepend a `~` to css file paths that are in your node_modules
+ *        See https://github.com/webpack-contrib/sass-loader#imports
+ */
+body {
+  height: 100%;
+  background: linear-gradient(
+    200.96deg,
+    #fedc2a -29.09%,
+    #dd5789 51.77%,
+    #7a2c9e 129.35%
+  );
+  overflow-y: hidden;
+}
+
+li {
+  list-style: none;
+}
+
+a {
+  text-decoration: none;
+  height: fit-content;
+  width: fit-content;
+  margin: 10px;
+}
+
+a:hover {
+  opacity: 1;
+  text-decoration: none;
+}
+
+.blocksview {
+  display: flexbox;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.MuiDataGrid-cell:focus {
+  outline: 'none',
+}
+
+.id_col {
+  background-color: aliceblue;
+}
+
+.red-cell {
+  background-color: red;
+  padding: 0;
+}
+.blue-cell {
+  background-color: blue;
+  padding: 0;
+}
+.default-cell {
+  background-color: white;
+}
+.react-grid-Container {
+  overflow-x: hidden;
+}
+.piece-grid.MuiDataGrid-columnHeaders {
+  display: none;
+}
+.hidden-hedder {
+  display: none;
+}
+.img-1 img {
+  width: 100%;
+  height: auto;
+}
+.red-cell.MuiDataGrid-cell.MuiDataGrid-cell--textLeft.MuiDataGrid-cell--withRightBorder {
+  padding: 0;
+  border-right-color:red;
+  border-top-color: red;
+}
+.blue-cell.MuiDataGrid-cell.MuiDataGrid-cell--textLeft.MuiDataGrid-cell--withRightBorder {
+  padding: 0;
+  border-right-color:#0070C0;
+  border-top-color: #0070C0
+}
+.red-cell.MuiDataGrid-cell.MuiDataGrid-cell--textLeft {
+  padding: 0;
+  border-right-color:red;
+  border-top-color: red;
+}
+.blue-cell.MuiDataGrid-cell.MuiDataGrid-cell--textLeft {
+  padding: 0;
+  border-right-color:#0070C0;
+  border-top-color: #0070C0
+}
