@@ -55,7 +55,7 @@ class BlockType(Enum):
             '''
             type D:
              ■ 
-             ■ ■ 
+             ■■ 
             '''
             return np.array([[1, 0], [1, 1]])
         elif self == BlockType.E:
@@ -72,29 +72,29 @@ class BlockType(Enum):
             type F:
                ■ 
                ■ 
-             ■ ■ 
+             ■■ 
             '''
             return np.array([[0, 1], [0, 1], [1, 1]])
         elif self == BlockType.G:
             '''
             type G:
              ■ 
-             ■ ■ 
+             ■■ 
              ■    
             '''
             return np.array([[1, 0], [1, 1], [1, 0]])
         elif self == BlockType.H:
             '''
             type H:
-             ■ ■ 
-             ■ ■ 
+             ■■ 
+             ■■ 
             '''
             return np.array([[1, 1], [1, 1]])
         elif self == BlockType.I:
             '''
             type I:
-             ■ ■ 
-               ■ ■ 
+             ■■ 
+               ■■ 
             '''
             return np.array([[1, 1, 0], [0, 1, 1]])
         elif self == BlockType.J:
@@ -113,7 +113,7 @@ class BlockType(Enum):
                ■ 
                ■ 
                ■ 
-             ■ ■ 
+             ■■ 
             '''
             return np.array([[0, 1], [0, 1], [0, 1], [1, 1]])
         elif self == BlockType.L:
@@ -121,7 +121,7 @@ class BlockType(Enum):
             type L:
                ■ 
                ■ 
-             ■ ■ 
+             ■■ 
              ■ 
             '''
             return np.array([[0, 1], [0, 1], [1, 1], [1, 0]])
@@ -129,23 +129,23 @@ class BlockType(Enum):
             '''
             type M:
                ■ 
-             ■ ■ 
-             ■ ■ 
+             ■■ 
+             ■■ 
             '''
             return np.array([[0, 1], [1, 1], [1, 1]])
         elif self == BlockType.N:
             '''
             type N:
-             ■ ■ 
+             ■■ 
                ■ 
-             ■ ■ 
+             ■■ 
             '''
             return np.array([[1, 1], [0, 1], [1, 1]])
         elif self == BlockType.O:
             '''
             type O:
              ■ 
-             ■ ■ 
+             ■■ 
              ■ 
              ■ 
             '''
@@ -155,7 +155,7 @@ class BlockType(Enum):
             type P:
                ■ 
                ■ 
-             ■ ■ ■ 
+             ■■■ 
             '''
             return np.array([[0, 1, 0], [0, 1, 0], [1, 1, 1]])
         elif self == BlockType.Q:
@@ -163,14 +163,14 @@ class BlockType(Enum):
             type Q:
              ■ 
              ■ 
-             ■ ■ ■ 
+             ■■■ 
             '''
             return np.array([[1, 0, 0], [1, 0, 0], [1, 1, 1]])
         elif self == BlockType.R:
             '''
             type R:
-             ■ ■ 
-               ■ ■ 
+             ■■ 
+               ■■ 
                  ■ 
             '''
             return np.array([[1, 1, 0], [0, 1, 1], [0, 0, 1]])
@@ -178,15 +178,15 @@ class BlockType(Enum):
             '''
             type S:
              ■ 
-             ■ ■ ■ 
-                 ■ 
+             ■■■ 
+               ■ 
             '''
             return np.array([[1, 0, 0], [1, 1, 1], [0, 0, 1]])
         elif self == BlockType.T:
             '''
             type T:
              ■ 
-             ■ ■ ■ 
+             ■■■ 
                ■ 
             '''
             return np.array([[1, 0, 0], [1, 1, 1], [0, 1, 0]])
@@ -194,7 +194,7 @@ class BlockType(Enum):
             '''
             type U:
                ■ 
-             ■ ■ ■ 
+             ■■■ 
                ■ 
             '''
             return np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
