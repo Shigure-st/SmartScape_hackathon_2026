@@ -14,6 +14,7 @@ class PlayerClient:
         self.p2Actions = ['A0AA', 'B098', 'N0A5', 'L659', 'K33B', 'J027', 'E2B9', 'C267', 'U07C', 'M3AD', 'O2BB', 'R41C']
         self.p1turn = 0
         self.p2turn = 0
+        # 文字型で初期化したnumpy二次元配列
         self.grid = np.zeros((14, 14), dtype='U1')
 
     @property
@@ -32,16 +33,12 @@ class PlayerClient:
                 raise SystemExit
 
     def generate_grid(self, board):
-        print("==================[DEBUG]==================")
+        """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
+        row_list = [x[1:] for x in board.strip().split('\n')[1:]]
         i = 0
-        # print("============[DEBUG]============", board.strip().split('\n'))
-        for row in board.strip().split('\n'):
-            if i == 14:
-                break
+        for row in row_list:
             j = 0
             for chr in row:
-                if j == 14:
-                    break
                 self.grid[i][j] = chr
                 j += 1
             i += 1
@@ -50,9 +47,8 @@ class PlayerClient:
         actions: list[str]
         turn: int
 
-        print("========================================")
+        # デバック用の二次元配列描画
         self.generate_grid(board)
-        print("==========[DEBUG]===========", type(self.grid))
         print(self.grid)
 
         if self.player_number == 1:
