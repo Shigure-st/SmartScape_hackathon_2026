@@ -4,6 +4,10 @@ from re import U
 import websockets
 import numpy as np
 
+from blocks_duo.Block import Block
+from blocks_duo.BlockType import BlockType
+from blocks_duo.BlockRotation import BlockRotation
+
 
 class PlayerClient:
     def __init__(self, player_number: int, socket: websockets.WebSocketClientProtocol, loop: asyncio.AbstractEventLoop):
@@ -47,6 +51,7 @@ class PlayerClient:
         actions: list[str]
         turn: int
 
+        block = Block
         # デバック用の二次元配列描画
         self.generate_grid(board)
         print(self.grid)
