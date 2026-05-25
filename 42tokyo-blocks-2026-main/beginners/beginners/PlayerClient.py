@@ -5,6 +5,9 @@ import websockets
 import numpy as np
 import random
 
+from blocks_duo.Player import Player
+from blocks_duo.Player import Position
+from blocks_duo.Board import Board
 from blocks_duo.Block import Block
 from blocks_duo.BlockType import BlockType
 from blocks_duo.BlockRotation import BlockRotation
@@ -20,9 +23,15 @@ class PlayerClient:
         self.p1turn = 0
         self.p2turn = 0
         # 文字型で初期化したnumpy二次元配列
-        self.grid = np.zeros((14, 14), dtype='U1')
+        self.board = Board()
+        self.board._Board__board = np.zeros((14, 14), dtype='U1')
         # 手持ちのブロックリスト
-        self.block_list = []
+        self.block_list = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+            'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
+        ]
+        # Boardのメソッドを活用するために使用
+        self.player = Player(player_number, "target", "beginners", socket)
 
     @property
     def player_number(self) -> int:
@@ -39,7 +48,7 @@ class PlayerClient:
             if action == 'X000':
                 raise SystemExit
 
-    def random_choice_block(self):
+    def random_choice_block(self) -> Block:
         """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
         try:
             block = self.block_list.pop(random.randrange(len(self.block_list)))
@@ -52,26 +61,43 @@ class PlayerClient:
         """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
         row_list = [x[1:] for x in board.strip().split('\n')[1:]]
         i = 0
-        for row in row_list:
-            j = 0
-            for chr in row:
-                self.grid[i][j] = chr
-                j += 1
-            i += 1
+        for i, row in enumerate(row_list):
+            for j, chr in enumerate(row):
+                self.board._Board__board[i][j] = chr
 
     def create_action(self, board):
         actions: list[str]
+        action: str
         turn: int
 
-        block = Block
+        block_id = self.random_choice_block()
+
+        block_type = BlockType(block_id)
+        block_rotation = BlockRotation(0)
+        block_position = Position(4, 4)
+
+        block = Block(block_type, block_rotation)
+        padded_block = Board.PaddedBlock(self.board, block, block_position)
+
+        # PaddedBlockのpropertyの表示
+        # print(f"padded block map: {padded_block.map}")
+        # print(f"padded block block map: {padded_block.block_map}")
+        # print(f"padded block edge map: {padded_block.edge_map}")
+        # print(f"padded block corner map: {padded_block.corner_map}")
+
+        try:
+            self.board.try_place_block(self.player, block, block_position)
+        except Exception as e:
+            print("An exception caught:", e)
+
         # デバック用のランダム選択描画
         # print("Block_list before:", self.block_list)
         # print("Random_choice:", self.random_choice_block())
         # print("Block_list after:", self.block_list)
 
         # デバック用の二次元配列描画
-        self.generate_grid(board)
-        print(self.grid)
+        # self.generate_grid(board)
+        # print(self.board)
 
         if self.player_number == 1:
             actions = self.p1Actions
