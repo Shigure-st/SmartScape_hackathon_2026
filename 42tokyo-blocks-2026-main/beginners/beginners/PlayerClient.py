@@ -27,6 +27,7 @@ class PlayerClient:
         self.p2Actions = ['A0AA', 'B098', 'N0A5', 'L659', 'K33B', 'J027', 'E2B9', 'C267', 'U07C', 'M3AD', 'O2BB', 'R41C']
         self.p1turn = 0
         self.p2turn = 0
+        self.total_turn = 0
         # 文字型で初期化したnumpy二次元配列
         self.board = Board()
         # 手持ちのブロックリスト
@@ -52,7 +53,7 @@ class PlayerClient:
             if action == 'X000':
                 raise SystemExit
 
-    def random_choice_block(self) -> Block:
+    def random_choice_block(self) -> str:
         """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
         try:
             block = self.block_list.pop(random.randrange(len(self.block_list)))
@@ -94,19 +95,72 @@ class PlayerClient:
 
         return placeable_mask
 
+    def get_corner_list(self, placeable_mask):
+        corner_list = []
+
+        for i in range(self.board.shape_x):
+            for j in range(self.board.shape_y):
+                if placeable_mask[j][i] == BLOCK_CORNER:
+                    corner_list.append([j, i])
+
+        return corner_list
+
+    def try_put_block(self, random_block, corner_list):
+        print(f"random block: {random_block}")
+
+        block_type = BlockType(random_block)
+        block_rotation = BlockRotation(0)
+        block = Block(block_type, block_rotation)
+
+        for y, x in corner_list:
+            block_position = Position(x + 1, y + 1)
+            padded_block = Board.PaddedBlock(self.board, block, block_position)
+
+            try:
+                self.board.assert_range(block, block_position)
+                if not self.board.can_place(self.player, padded_block):
+                    raise Exception
+                random_block += '0'
+                random_block += str(hex(x + 1))[2:]
+                random_block += str(hex(y + 1))[2:]
+                return random_block
+            except Exception:
+                continue
+
+        return "X000"
+
+    def try_all_blocks(self):
+        placeable_mask = self.check_placeable()
+        corner_list = self.get_corner_list(placeable_mask)
+        dump = []
+
+        while True:
+            random_block = self.random_choice_block()
+            next_action = self.try_put_block(random_block, corner_list)
+            if next_action == "X000":
+                dump.append(random_block)
+                if len(self.block_list) == 0:
+                    self.block_list.extend(dump)
+                    return "X000"
+            else:
+                self.block_list.append(dump)
+                if self.player_number == 2:
+                    print(f"next action 2: {next_action}")
+                return next_action
+
     def create_action(self, board):
         actions: list[str]
         action: str
         turn: int
 
-        block_id = self.random_choice_block()
+        # block_id = self.random_choice_block()
 
-        block_type = BlockType(block_id)
-        block_rotation = BlockRotation(0)
-        block_position = Position(4, 4)
+        # block_type = BlockType(block_id)
+        # block_rotation = BlockRotation(0)
+        # block_position = Position(4, 4)
 
-        block = Block(block_type, block_rotation)
-        padded_block = Board.PaddedBlock(self.board, block, block_position)
+        # block = Block(block_type, block_rotation)
+        # padded_block = Board.PaddedBlock(self.board, block, block_position)
 
         # PaddedBlockのpropertyの表示
         # print(f"padded block map: {padded_block.map}")
@@ -114,11 +168,11 @@ class PlayerClient:
         # print(f"padded block edge map: {padded_block.edge_map}")
         # print(f"padded block corner map: {padded_block.corner_map}")
 
-        try:
-            self.board.can_place(self.player, padded_block)
-            self.board.try_place_block(self.player, block, block_position)
-        except Exception as e:
-            print("An exception caught:", e)
+        # try:
+        #     self.board.can_place(self.player, padded_block)
+        #     self.board.try_place_block(self.player, block, block_position)
+        # except Exception as e:
+        #     print("An exception caught:", e)
 
         # デバック用のランダム選択描画
         # print("Block_list before:", self.block_list)
@@ -131,24 +185,20 @@ class PlayerClient:
 
         # 置くスペースがある場所の取得
         # print("-----------------test-----------------")
-        # print(self.check_placeable())
+        # print(corner_list)
         # print("--------------------------------------")
 
-        if self.player_number == 1:
-            actions = self.p1Actions
-            turn = self.p1turn
-            self.p1turn += 1
+        if self.total_turn == 0:
+            self.block_list.pop(-1)
+            self.total_turn += 1
+            if self.player_number == 1:
+                return "U034"
+            else:
+                return "U089"
         else:
-            actions = self.p2Actions
-            turn = self.p2turn
-            self.p2turn += 1
+            self.total_turn += 1
+            return self.try_all_blocks()
 
-        if len(actions) > turn:
-            return actions[turn]
-        else:
-            # パスを選択
-            return 'X000'
-    
     @staticmethod
     async def create(url: str, loop: asyncio.AbstractEventLoop) -> PlayerClient:
         socket = await websockets.connect(url)
