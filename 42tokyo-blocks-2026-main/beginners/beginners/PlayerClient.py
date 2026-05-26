@@ -12,6 +12,11 @@ from blocks_duo.Block import Block
 from blocks_duo.BlockType import BlockType
 from blocks_duo.BlockRotation import BlockRotation
 
+BLOCK_COLLISION = 1
+BLOCK_EDGE = 2
+BLOCK_CORNER = 3
+
+
 
 class PlayerClient:
     def __init__(self, player_number: int, socket: websockets.WebSocketClientProtocol, loop: asyncio.AbstractEventLoop):
@@ -80,11 +85,12 @@ class PlayerClient:
                     Block(BlockType('A'), BlockRotation(0)),
                     Position(i + 1, j + 1)
                 )
-                if not self.board.detect_collision(padded_block) \
-                    and not self.board.detect_side_connection(self.player, padded_block):
-                    placeable_mask[j][i] = 1
+                if self.board.detect_side_connection(self.player, padded_block):
+                    placeable_mask[j][i] = BLOCK_EDGE
+                if self.board.detect_collision(padded_block):
+                    placeable_mask[j][i] = BLOCK_COLLISION
                 if self.board.can_place(self.player, padded_block):
-                    placeable_mask[j][i] = 2
+                    placeable_mask[j][i] = BLOCK_CORNER
 
         return placeable_mask
 
