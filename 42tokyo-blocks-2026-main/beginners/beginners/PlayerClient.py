@@ -65,10 +65,28 @@ class PlayerClient:
                     self.board._Board__board[i][j] = 0
                 elif chr == Player1Char:
                     self.board._Board__board[i][j] = 1
-                elif chr == Player1Char:
+                elif chr == Player2Char:
                     self.board._Board__board[i][j] = 2
                 else:
                     raise Exception
+
+    def check_placeable(self) -> np.ndarray:
+        placeable_mask = np.zeros((14, 14), dtype=np.int64)
+
+        for i in range(self.board.shape_x):
+            for j in range(self.board.shape_y):
+                padded_block = Board.PaddedBlock(
+                    self.board,
+                    Block(BlockType('A'), BlockRotation(0)),
+                    Position(i + 1, j + 1)
+                )
+                if not self.board.detect_collision(padded_block) \
+                    and not self.board.detect_side_connection(self.player, padded_block):
+                    placeable_mask[j][i] = 1
+                if self.board.can_place(self.player, padded_block):
+                    placeable_mask[j][i] = 2
+
+        return placeable_mask
 
     def create_action(self, board):
         actions: list[str]
@@ -102,8 +120,13 @@ class PlayerClient:
         # print("Block_list after:", self.block_list)
 
         # デバック用の二次元配列描画
-        # self.generate_grid(board)
+        self.generate_grid(board)
         # print(self.board)
+
+        # 置くスペースがある場所の取得
+        # print("-----------------test-----------------")
+        # print(self.check_placeable())
+        # print("--------------------------------------")
 
         if self.player_number == 1:
             actions = self.p1Actions
