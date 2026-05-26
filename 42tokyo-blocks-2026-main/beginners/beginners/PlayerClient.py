@@ -7,7 +7,7 @@ import random
 
 from blocks_duo.Player import Player
 from blocks_duo.Player import Position
-from blocks_duo.Board import Board
+from blocks_duo.Board import Board, EmptyChar, Player1Char, Player2Char
 from blocks_duo.Block import Block
 from blocks_duo.BlockType import BlockType
 from blocks_duo.BlockRotation import BlockRotation
@@ -24,7 +24,6 @@ class PlayerClient:
         self.p2turn = 0
         # 文字型で初期化したnumpy二次元配列
         self.board = Board()
-        self.board._Board__board = np.zeros((14, 14), dtype='U1')
         # 手持ちのブロックリスト
         self.block_list = [
             'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
@@ -60,10 +59,16 @@ class PlayerClient:
     def generate_grid(self, board) -> None:
         """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
         row_list = [x[1:] for x in board.strip().split('\n')[1:]]
-        i = 0
         for i, row in enumerate(row_list):
             for j, chr in enumerate(row):
-                self.board._Board__board[i][j] = chr
+                if chr == EmptyChar:
+                    self.board._Board__board[i][j] = 0
+                elif chr == Player1Char:
+                    self.board._Board__board[i][j] = 1
+                elif chr == Player1Char:
+                    self.board._Board__board[i][j] = 2
+                else:
+                    raise Exception
 
     def create_action(self, board):
         actions: list[str]
@@ -86,6 +91,7 @@ class PlayerClient:
         # print(f"padded block corner map: {padded_block.corner_map}")
 
         try:
+            self.board.can_place(self.player, padded_block)
             self.board.try_place_block(self.player, block, block_position)
         except Exception as e:
             print("An exception caught:", e)
