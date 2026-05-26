@@ -3,6 +3,19 @@ import asyncio
 from re import U
 import websockets
 import numpy as np
+import random
+
+from blocks_duo.Player import Player
+from blocks_duo.Player import Position
+from blocks_duo.Board import Board, EmptyChar, Player1Char, Player2Char
+from blocks_duo.Block import Block
+from blocks_duo.BlockType import BlockType
+from blocks_duo.BlockRotation import BlockRotation
+
+BLOCK_COLLISION = 1
+BLOCK_EDGE = 2
+BLOCK_CORNER = 3
+
 
 
 class PlayerClient:
@@ -10,12 +23,14 @@ class PlayerClient:
         self._loop = loop
         self._socket = socket
         self._player_number = player_number
-        self.p1Actions = ['U034', 'B037', 'J266', 'M149', 'O763', 'R0A3', 'F0C6', 'K113', 'T021', 'L5D2', 'G251', 'E291', 'D057', 'A053']
-        self.p2Actions = ['A0AA', 'B098', 'N0A5', 'L659', 'K33B', 'J027', 'E2B9', 'C267', 'U07C', 'M3AD', 'O2BB', 'R41C']
-        self.p1turn = 0
-        self.p2turn = 0
-        # 文字型で初期化したnumpy二次元配列
-        self.grid = np.zeros((14, 14), dtype='U1')
+        self.total_turn = 0
+        # 手持ちのブロックリスト
+        self.block_list = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+            'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
+        ]
+        # Boardのメソッドを活用するために使用
+        self.player = Player(player_number, "target", "beginners", socket)
 
     @property
     def player_number(self) -> int:
@@ -32,40 +47,123 @@ class PlayerClient:
             if action == 'X000':
                 raise SystemExit
 
-    def generate_grid(self, board):
+    def random_choice_block(self) -> str:
+        """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
+        try:
+            block = self.block_list.pop(random.randrange(len(self.block_list)))
+        except Exception as e:
+            print("ERROR:", e)
+        else:
+            return block
+
+    def generate_board(self, board) -> None:
         """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
+        current_board = Board()
         row_list = [x[1:] for x in board.strip().split('\n')[1:]]
-        i = 0
-        for row in row_list:
-            j = 0
-            for chr in row:
-                self.grid[i][j] = chr
-                j += 1
-            i += 1
+        for i, row in enumerate(row_list):
+            for j, chr in enumerate(row):
+                if chr == EmptyChar:
+                    current_board._Board__board[i][j] = 0
+                elif chr == Player1Char:
+                    current_board._Board__board[i][j] = 1
+                elif chr == Player2Char:
+                    current_board._Board__board[i][j] = 2
+                else:
+                    raise Exception
+        return current_board
+
+    def check_placeable(self, board) -> np.ndarray:
+        """現在のボードの状況をマッピングするメソッド"""
+        placeable_mask = np.zeros((14, 14), dtype=np.int64)
+
+        for i in range(board.shape_x):
+            for j in range(board.shape_y):
+                padded_block = Board.PaddedBlock(
+                    board,
+                    Block(BlockType('A'), BlockRotation(0)),
+                    Position(i + 1, j + 1)
+                )
+                if board.detect_side_connection(self.player, padded_block):
+                    placeable_mask[j][i] = BLOCK_EDGE
+                if board.detect_collision(padded_block):
+                    placeable_mask[j][i] = BLOCK_COLLISION
+                if board.can_place(self.player, padded_block):
+                    placeable_mask[j][i] = BLOCK_CORNER
+
+        return placeable_mask
+
+    def get_corner_list(self, board, placeable_mask):
+        """置くことができるブロックの角の座標のリストを返すメソッド"""
+        corner_list = []
+
+        for i in range(board.shape_x):
+            for j in range(board.shape_y):
+                if placeable_mask[j][i] == BLOCK_CORNER:
+                    corner_list.append([j, i])
+
+        return corner_list
+
+    def try_put_block(self, board, random_block, corner_list):
+        """選んだブロックを置けるかを確認し、次の一手を返すメソッド"""
+        block_type = BlockType(random_block)
+        block_rotation = BlockRotation(0)
+        block = Block(block_type, block_rotation)
+
+        for y, x in corner_list:
+            block_position = Position(x + 1, y + 1)
+            try:
+                board.assert_range(block, block_position)
+                padded_block = Board.PaddedBlock(board, block, block_position)
+                if board.can_place(self.player, padded_block):
+                    random_block += f"0{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
+                    return random_block
+            except Exception:
+                continue
+
+        return "X000"
+
+    def try_all_blocks(self, given_board):
+        """すべてのブロックを置けるか全探索"""
+        # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
+        board = self.generate_board(given_board)
+        # 現在のボードの状況をマッピング
+        placeable_mask = self.check_placeable(board)
+        # 現在のボードの状況をマッピング
+        corner_list = self.get_corner_list(board, placeable_mask)
+        # 置けなかったブロックを保存しておくリスト
+        save = []
+
+        while True:
+            random_block = self.random_choice_block()
+            next_action = self.try_put_block(board, random_block, corner_list)
+            if next_action == "X000":
+                save.append(random_block)
+                if len(self.block_list) == 0:
+                    self.block_list.extend(save)
+                    return "X000"
+            else:
+                self.block_list.extend(save)
+                if self.player_number == 2:
+                    print(f"next action 2: {next_action}")
+                return next_action
 
     def create_action(self, board):
         actions: list[str]
+        action: str
         turn: int
 
-        # デバック用の二次元配列描画
-        self.generate_grid(board)
-        print(self.grid)
-
-        if self.player_number == 1:
-            actions = self.p1Actions
-            turn = self.p1turn
-            self.p1turn += 1
+        # 一手目は指定して打つ
+        if self.total_turn == 0:
+            self.block_list.pop(-1)
+            self.total_turn += 1
+            if self.player_number == 1:
+                return "U034"
+            else:
+                return "U089"
         else:
-            actions = self.p2Actions
-            turn = self.p2turn
-            self.p2turn += 1
+            self.total_turn += 1
+            return self.try_all_blocks(board)
 
-        if len(actions) > turn:
-            return actions[turn]
-        else:
-            # パスを選択
-            return 'X000'
-    
     @staticmethod
     async def create(url: str, loop: asyncio.AbstractEventLoop) -> PlayerClient:
         socket = await websockets.connect(url)
