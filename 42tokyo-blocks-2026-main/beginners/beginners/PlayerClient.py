@@ -15,6 +15,9 @@ from blocks_duo.BlockRotation import BlockRotation
 BLOCK_COLLISION = 1
 BLOCK_EDGE = 2
 BLOCK_CORNER = 3
+ENEMY_BLOCK_COLLISION = 4
+ENEMY_BLOCK_EDGE = 5
+ENEMY_BLOCK_CORNER = 6
 
 
 
@@ -31,6 +34,7 @@ class PlayerClient:
         ]
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
+        self.enemy_player = Player(4, "target", "beginners", socket)
 
     @property
     def player_number(self) -> int:
@@ -86,10 +90,35 @@ class PlayerClient:
                 if board.detect_side_connection(self.player, padded_block):
                     placeable_mask[j][i] = BLOCK_EDGE
                 if board.detect_collision(padded_block):
-                    placeable_mask[j][i] = BLOCK_COLLISION
+                    if board.now_board()[j][i] == self.player_number:
+                        placeable_mask[j][i] = BLOCK_COLLISION
+                    else:
+                        placeable_mask[j][i] = ENEMY_BLOCK_COLLISION
                 if board.can_place(self.player, padded_block):
                     placeable_mask[j][i] = BLOCK_CORNER
 
+        return placeable_mask
+
+    def enemy_placeable(self, placeable_mask, board) -> np.ndarray:
+        cur_board = Board()
+        cur_board._Board__board = placeable_mask
+        for i in range(cur_board.shape_x):
+            for j in range(cur_board.shape_y):
+                padded_block = Board.PaddedBlock(
+                    cur_board,
+                    Block(BlockType('A'), BlockRotation(0)),
+                    Position(i + 1, j + 1)
+                )
+
+                if cur_board.detect_side_connection(self.enemy_player, padded_block):
+                    placeable_mask[j][i] = ENEMY_BLOCK_EDGE
+                if cur_board.detect_collision(padded_block):
+                    if cur_board.now_board()[j][i] != self.player_number:
+                        placeable_mask[j][i] = ENEMY_BLOCK_COLLISION
+                if cur_board.can_place(self.enemy_player, padded_block):
+                    placeable_mask[j][i] = ENEMY_BLOCK_CORNER
+
+        print(placeable_mask)
         return placeable_mask
 
     def get_corner_list(self, board, placeable_mask):
@@ -128,6 +157,14 @@ class PlayerClient:
         board = self.generate_board(given_board)
         # 現在のボードの状況をマッピング
         placeable_mask = self.check_placeable(board)
+        print("=====================placeable_mask======================")
+        print(placeable_mask)
+        print("=========================================================")
+        
+        self.enemy_placeble(placeable_mask, board)
+        # print("=====================Enemy placeable_mask======================")
+        # print(self.enemy_placeble(placeable_mask, board))
+        # print("=========================================================")
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
         # 置けなかったブロックを保存しておくリスト
