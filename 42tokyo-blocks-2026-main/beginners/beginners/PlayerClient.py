@@ -34,7 +34,11 @@ class PlayerClient:
         ]
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
-        self.enemy_player = Player(4, "target", "beginners", socket)
+        if player_number == 1:
+            self.enemy_player = Player(2, "target", "beginners", socket)
+        else:
+            self.enemy_player = Player(1, "target", "beginners", socket)
+
 
     @property
     def player_number(self) -> int:
@@ -59,6 +63,16 @@ class PlayerClient:
             print("ERROR:", e)
         else:
             return block
+
+    def pop_largest_block(self) -> str:
+        """手持ちのブロックリストからマスが多い順に一つ持ってくるメソッド."""
+        try:
+            block = self.block_list.pop()
+        except Exception as e:
+            print("ERROR:", e)
+        else:
+            return block
+
 
     def generate_board(self, board) -> None:
         """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
@@ -90,36 +104,42 @@ class PlayerClient:
                 if board.detect_side_connection(self.player, padded_block):
                     placeable_mask[j][i] = BLOCK_EDGE
                 if board.detect_collision(padded_block):
-                    if board.now_board()[j][i] == self.player_number:
-                        placeable_mask[j][i] = BLOCK_COLLISION
-                    else:
-                        placeable_mask[j][i] = ENEMY_BLOCK_COLLISION
+                    placeable_mask[j][i] = BLOCK_COLLISION
                 if board.can_place(self.player, padded_block):
                     placeable_mask[j][i] = BLOCK_CORNER
 
         return placeable_mask
 
-    def enemy_placeable(self, placeable_mask, board) -> np.ndarray:
-        cur_board = Board()
-        cur_board._Board__board = placeable_mask
-        for i in range(cur_board.shape_x):
-            for j in range(cur_board.shape_y):
+    def enemy_placeable(self, board) -> np.ndarray:
+        """相手のボードの状況をマッピングするメソッド"""
+        enemy_placeable_mask = np.zeros((14, 14), dtype=np.int64)
+
+        for i in range(board.shape_x):
+            for j in range(board.shape_y):
                 padded_block = Board.PaddedBlock(
-                    cur_board,
+                    board,
                     Block(BlockType('A'), BlockRotation(0)),
                     Position(i + 1, j + 1)
                 )
 
-                if cur_board.detect_side_connection(self.enemy_player, padded_block):
-                    placeable_mask[j][i] = ENEMY_BLOCK_EDGE
-                if cur_board.detect_collision(padded_block):
-                    if cur_board.now_board()[j][i] != self.player_number:
-                        placeable_mask[j][i] = ENEMY_BLOCK_COLLISION
-                if cur_board.can_place(self.enemy_player, padded_block):
-                    placeable_mask[j][i] = ENEMY_BLOCK_CORNER
+                if board.detect_side_connection(self.enemy_player, padded_block):
+                    enemy_placeable_mask[j][i] = BLOCK_EDGE
+                if board.detect_collision(padded_block):
+                    enemy_placeable_mask[j][i] = BLOCK_COLLISION
+                if board.can_place(self.enemy_player, padded_block):
+                    enemy_placeable_mask[j][i] = BLOCK_CORNER
+        return enemy_placeable_mask
 
-        print(placeable_mask)
-        return placeable_mask
+    def get_enemy_corner_list(self, board, enemy_placeable_mask) -> list[list[int, int]]:
+        """相手が置くことができるブロックの角の座標のリストを返すメソッド"""
+        enemy_corner_list = []
+
+        for i in range(board.shape_x):
+            for j in range(board.shape_y):
+                if enemy_placeable_mask[j][i] == BLOCK_CORNER:
+                    enemy_corner_list.append([j, i])
+
+        return enemy_corner_list
 
     def get_corner_list(self, board, placeable_mask):
         """置くことができるブロックの角の座標のリストを返すメソッド"""
@@ -151,22 +171,54 @@ class PlayerClient:
 
         return "X000"
 
+    def count_placeable(self, board, largest_block, corner_list, next_action_dict):
+        """
+        ブロックを配置可能座標に全ての回転で設置して
+        次のターンの配置可能数を辞書に保存する
+        """
+        """選んだブロックを置けるかを確認し、次の一手を返すメソッド"""
+        for i in range(8):
+            block_type = BlockType(largest_block)
+            block_rotation = BlockRotation(i)
+            block = Block(block_type, block_rotation)
+
+            for y, x in corner_list:
+                block_position = Position(x + 1, y + 1)
+                try:
+                    board.assert_range(block, block_position)
+                    padded_block = Board.PaddedBlock(board, block, block_position)
+                    if board.can_place(self.player, padded_block):
+                        largest_block += f"0{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
+                        next_action_dict['largest_block'] 
+                        return random_block
+                except Exception:
+                    continue
+
+        return "X000"
+
     def try_all_blocks(self, given_board):
         """すべてのブロックを置けるか全探索"""
         # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
         board = self.generate_board(given_board)
         # 現在のボードの状況をマッピング
         placeable_mask = self.check_placeable(board)
-        print("=====================placeable_mask======================")
+        enemy_placeable_mask = self.enemy_placeable(board)
+        print("==============placeable_mask==================")
         print(placeable_mask)
-        print("=========================================================")
+        print("===========================================")
+        print("==============enemy_placeable_mask==================")
+        print(enemy_placeable_mask)
+        print("===========================================")
         
-        self.enemy_placeble(placeable_mask, board)
-        # print("=====================Enemy placeable_mask======================")
-        # print(self.enemy_placeble(placeable_mask, board))
-        # print("=========================================================")
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
+        enemy_corner_list = self.get_enemy_corner_list(board, enemy_placeable_mask)
+        print("==============corner_list==================")
+        print(corner_list)
+        print("===========================================")
+        print("==============enemy_corner_list==================")
+        print(enemy_corner_list)
+        print("===========================================")
         # 置けなかったブロックを保存しておくリスト
         save = []
 
