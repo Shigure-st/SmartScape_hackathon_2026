@@ -115,20 +115,21 @@ class PlayerClient:
         block_type = BlockType(random_block)
         corner_list = self.sort_corner_list(corner_list)
 
-        for rot in range(8):
-            block_rotation = BlockRotation(rot)
-            block = Block(block_type, block_rotation)
-
-            for y, x in corner_list:
-                block_position = Position(x + 1, y + 1)
-                try:
-                    board.assert_range(block, block_position)
-                    padded_block = Board.PaddedBlock(board, block, block_position)
-                    if board.can_place(self.player, padded_block):
-                        random_block += f"{rot}{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
-                        return random_block
-                except Exception:
-                    continue
+        for y, x in corner_list:
+            for rot in range(8):
+                block_rotation = BlockRotation(rot)
+                block = Block(block_type, block_rotation)
+                for dy in range(0, block.shape_y):
+                    for dx in range(0, block.shape_x):
+                        block_position = Position(x + 1 - dx, y + 1 - dy)
+                        try:
+                            board.assert_range(block, block_position)
+                            padded_block = Board.PaddedBlock(board, block, block_position)
+                            if board.can_place(self.player, padded_block):
+                                random_block += f"{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
+                                return random_block
+                        except Exception:
+                            continue
 
         return "X000"
 
@@ -153,8 +154,6 @@ class PlayerClient:
                     return "X000"
             else:
                 self.block_list.extend(save)
-                if self.player_number == 2:
-                    print(f"next action 2: {next_action}")
                 return next_action
 
     def create_action(self, board):
