@@ -4,6 +4,7 @@ from re import U
 import websockets
 import numpy as np
 import random
+import copy
 
 from blocks_duo.Player import Player
 from blocks_duo.Player import Position
@@ -171,70 +172,113 @@ class PlayerClient:
 
         return "X000"
 
-    def count_placeable(self, board, largest_block, corner_list, next_action_dict):
+    def count_placeable(self, board, corner_list, next_action_dict) -> str | None:
         """
         ブロックを配置可能座標に全ての回転で設置して
         次のターンの配置可能数を辞書に保存する
         """
-        """選んだブロックを置けるかを確認し、次の一手を返すメソッド"""
-        for i in range(8):
-            block_type = BlockType(largest_block)
-            block_rotation = BlockRotation(i)
-            block = Block(block_type, block_rotation)
+        save = []
+        for largest_block in self.block_list.pop():
+            save.append(largest_block)
+            for i in range(8):
+                block_type = BlockType(largest_block)
+                block_rotation = BlockRotation(i)
+                block = Block(block_type, block_rotation)
 
-            for y, x in corner_list:
-                block_position = Position(x + 1, y + 1)
-                try:
-                    board.assert_range(block, block_position)
-                    padded_block = Board.PaddedBlock(board, block, block_position)
-                    if board.can_place(self.player, padded_block):
-                        largest_block += f"0{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
-                        next_action_dict['largest_block'] 
-                        return random_block
-                except Exception:
-                    continue
+                for y, x in corner_list:
+                    block_position = Position(x + 1, y + 1)
+                    try:
+                        board.assert_range(block, block_position)
+                        padded_block = Board.PaddedBlock(board, block, block_position)
+                        if board.can_place(self.player, padded_block):
+                            tmp_string = largest_block
+                            tmp_string += f"0{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
+                            next_action_dict[tmp_string] = self.get_available_block_count(board, padded_block)
+                    except Exception:
+                        continue
 
-        return "X000"
+        self.block_list.extend(save)
+        return
 
-    def try_all_blocks(self, given_board):
-        """すべてのブロックを置けるか全探索"""
+    def get_available_block_count(self, board, padded_block) -> int:
+        temp_board = copy.deepcopy(board)
+        temp_board.place_block(self.player, padded_block)
+        placeable_mask = self.check_placeable(temp_board)
+        corner_list = self.get_corner_list(board, placeable_mask)
+        return len(corner_list)
+
+    def solve_max_placement(self, given_board):
+        """配置可能数優先アルゴリズム"""
+        next_action_dict = {}
+
         # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
         board = self.generate_board(given_board)
+
         # 現在のボードの状況をマッピング
         placeable_mask = self.check_placeable(board)
         enemy_placeable_mask = self.enemy_placeable(board)
-        print("==============placeable_mask==================")
-        print(placeable_mask)
-        print("===========================================")
-        print("==============enemy_placeable_mask==================")
-        print(enemy_placeable_mask)
-        print("===========================================")
         
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
         enemy_corner_list = self.get_enemy_corner_list(board, enemy_placeable_mask)
-        print("==============corner_list==================")
-        print(corner_list)
-        print("===========================================")
-        print("==============enemy_corner_list==================")
-        print(enemy_corner_list)
-        print("===========================================")
-        # 置けなかったブロックを保存しておくリスト
-        save = []
+        print("Block LIst:", self.block_list)
 
         while True:
-            random_block = self.random_choice_block()
-            next_action = self.try_put_block(board, random_block, corner_list)
-            if next_action == "X000":
-                save.append(random_block)
-                if len(self.block_list) == 0:
-                    self.block_list.extend(save)
-                    return "X000"
+            self.count_placeable(board, corner_list, next_action_dict)
+            print("Corner_list:", corner_list)
+            print("Dict:", next_action_dict.items())
+            if not next_action_dict:
+                # save.append(largest_block)
+                # if len(self.block_list) == 0:
+                #     self.block_list.extend(save)
+                return "X000"
             else:
-                self.block_list.extend(save)
+                # self.block_list.extend(save)
+                next_action = max(next_action_dict)
+                self.block_list.remove(next_action[0])
                 if self.player_number == 2:
                     print(f"next action 2: {next_action}")
                 return next_action
+
+    # def try_all_blocks(self, given_board):
+    #     """すべてのブロックを置けるか全探索"""
+    #     # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
+    #     board = self.generate_board(given_board)
+    #     # 現在のボードの状況をマッピング
+    #     placeable_mask = self.check_placeable(board)
+    #     enemy_placeable_mask = self.enemy_placeable(board)
+    #     print("==============placeable_mask==================")
+    #     print(placeable_mask)
+    #     print("===========================================")
+    #     # print("==============enemy_placeable_mask==================")
+    #     # print(enemy_placeable_mask)
+    #     # print("===========================================")
+    #
+    #     # 現在のボードの状況をマッピング
+    #     corner_list = self.get_corner_list(board, placeable_mask)
+    #     enemy_corner_list = self.get_enemy_corner_list(board, enemy_placeable_mask)
+    #     print("==============corner_list==================")
+    #     print(corner_list)
+    #     print("===========================================")
+    #     print("==============enemy_corner_list==================")
+    #     print(enemy_corner_list)
+    #     print("===========================================")
+    #     # 置けなかったブロックを保存しておくリスト
+    #     save = []
+    #
+    #     while True:
+    #         random_block = self.random_choice_block()
+    #         next_action = self.try_put_block(board, random_block, corner_list)
+    #         if next_action == "X000":
+    #             save.append(random_block)
+    #             if len(self.block_list) == 0:
+    #                 self.block_list.extend(save)
+    #                 return "X000"
+    #         else:
+    #             self.block_list.extend(save)
+    #             if self.player_number == 2:
+    #                 print(f"next action 2: {next_action}")
+    #             return next_action
 
     def create_action(self, board):
         actions: list[str]
@@ -251,7 +295,7 @@ class PlayerClient:
                 return "U089"
         else:
             self.total_turn += 1
-            return self.try_all_blocks(board)
+            return self.solve_max_placement(board)
 
     @staticmethod
     async def create(url: str, loop: asyncio.AbstractEventLoop) -> PlayerClient:
