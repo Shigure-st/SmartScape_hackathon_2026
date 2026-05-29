@@ -142,8 +142,8 @@ class PlayerClient:
         target_blocks_mask = self.player_blocks(board.now_board(), self._target_number)
 
         # それぞれのプレイヤーのブロック位置
-        my_blocks_map = np.where(my_blocks_mask and (board.now_board() > 0), 1, 0)
-        target_blocks_map = np.where(target_blocks_mask and (board.now_board() > 0), 1, 0)
+        my_blocks_map = np.where(my_blocks_mask & (board.now_board() > 0), 1, 0)
+        target_blocks_map = np.where(target_blocks_mask & (board.now_board() > 0), 1, 0)
 
         # それぞれのプレイヤーのブロックmapに一周０を追加
         my_padded_board = np.pad(my_blocks_map, pad_width=1, mode='constant', constant_values=0)
@@ -282,11 +282,10 @@ class PlayerClient:
                         and my_padded_block.flatten().dot(target_blocks_map.flatten()) == 0:
                             action = f"{random_block}{rot}{str(hex(block_position.x))[2:]}{str(hex(block_position.y))[2:]}"
                             eval_val = self.evaluate_next_action(my_padded_block, target_corner_mask)
-                            print(eval_val)
                             if next_action[0] < eval_val:
                                 next_action[0] = eval_val
                                 next_action[1] = action
-                    except Exception:
+                    except Exception as e:
                         continue
 
         current_time = time.time()
@@ -340,7 +339,6 @@ class PlayerClient:
         else:
             self.total_turn += 1
             action = self.try_all_blocks(board, start_time)
-            print(action)
             return action
 
     @staticmethod
