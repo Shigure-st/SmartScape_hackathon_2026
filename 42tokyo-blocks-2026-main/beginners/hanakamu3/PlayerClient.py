@@ -142,8 +142,8 @@ class PlayerClient:
         target_blocks_mask = self.player_blocks(board.now_board(), self._target_number)
 
         # それぞれのプレイヤーのブロック位置
-        my_blocks_map = np.where(my_blocks_mask & (board.now_board() > 0), 1, 0)
-        target_blocks_map = np.where(target_blocks_mask & (board.now_board() > 0), 1, 0)
+        my_blocks_map = np.where(my_blocks_mask and (board.now_board() > 0), 1, 0)
+        target_blocks_map = np.where(target_blocks_mask and (board.now_board() > 0), 1, 0)
 
         # それぞれのプレイヤーのブロックmapに一周０を追加
         my_padded_board = np.pad(my_blocks_map, pad_width=1, mode='constant', constant_values=0)
@@ -166,7 +166,7 @@ class PlayerClient:
 
     def get_zone_density(self, board, zone):
         density = 0
-        for y in range(7 * ((zone >> 1) & 2), 7 + 7 * ((zone >> 1) & 2)):
+        for y in range(7 * ((zone >> 1) & 1), 7 + 7 * ((zone >> 1) & 1)):
             for x in range(7 * (zone & 1), 7 + 7 * (zone & 1)):
                 if board.now_board()[y][x] > 0:
                     density += 1
@@ -245,7 +245,7 @@ class PlayerClient:
         return sorted_corner_list
 
     def evaluate_next_action(self, padded_block, target_corner_mask):
-        return padded_block.block_map.flatten().dot(target_corner_mask.flatten())
+        return padded_block.flatten().dot(target_corner_mask.flatten())
 
 # === Put Block === #
 
@@ -264,7 +264,6 @@ class PlayerClient:
         next_action = [-1, "X000"]
 
         current_time = time.time()
-        print(f"log({random_block}):", current_time - start_time)
         for y, x in corner_list:
             for rot, deltas in self.block_data[random_block].items():
                 for dx, dy in deltas:
@@ -275,14 +274,15 @@ class PlayerClient:
                     try:
                         board.assert_range(block, block_position)
                         my_padded_block = np.zeros((board.shape_y, board.shape_x), dtype=np.int64)
-                        my_padded_block[block_position.y: block_position.y + block.shape_y, block_position.x: block_position.x + block.shape_x] = block.block_map
+                        my_padded_block[block_position.y: block_position.y + block.shape_y, \
+                         block_position.x: block_position.x + block.shape_x] = block.block_map
                         my_side_blocks_map, target_blocks_map = \
                         self.check_can_put(board)
                         if my_padded_block.flatten().dot(my_side_blocks_map.flatten()) == 0 \
                         and my_padded_block.flatten().dot(target_blocks_map.flatten()) == 0:
-                            action = f"{random_block}{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
+                            action = f"{random_block}{rot}{str(hex(block_position.x))[2:]}{str(hex(block_position.y))[2:]}"
                             eval_val = self.evaluate_next_action(my_padded_block, target_corner_mask)
-                            print("eval_val:", eval_val)
+                            print(eval_val)
                             if next_action[0] < eval_val:
                                 next_action[0] = eval_val
                                 next_action[1] = action
@@ -290,8 +290,6 @@ class PlayerClient:
                         continue
 
         current_time = time.time()
-        print(next_action)
-        print(f"log({random_block}):", current_time - start_time)
 
         return next_action
 
@@ -305,8 +303,6 @@ class PlayerClient:
         corner_list = self.get_corner_list(board, placeable_mask)
         # 優先して攻めるエリアの決定
         corner_list = self.select_attack_area(corner_list, board)
-        # 置けなかったブロックを保存しておくリスト
-        save = []
 
         action = [-1, "X000"]
         self.non_used_count = np.zeros((len(self.block_list), ), dtype=np.int64)
@@ -317,20 +313,15 @@ class PlayerClient:
 
         for corner_batch in corner_list:
             for tier_index in block_list_index:
-                while len(self.block_list[tier_index]) != 0:
-                    random_block = self.random_choice_block(tier_index)
+                for random_block in self.block_list[tier_index]:
                     next_action = self.try_put_block(board, random_block, corner_batch, target_corner_mask, start_time)
-                    if next_action[1] == "X000":
-                        save.append(random_block)
-                    else:
-                        if action[0] < next_action[0]:
-                            action[0] = next_action[0]
-                            action[1] = next_action[1]
+                    if next_action[0] > -1 and action[0] < next_action[0]:
+                        action = next_action
 
-                self.block_list[tier_index].extend(save)
                 self.non_used_count[tier_index] += 1
                 current_time = time.time()
                 if action[0] > -1 or (current_time - start_time >= 13):
+                    self.block_list[tier_index].remove(action[1][0])
                     return action[1]
 
         return "X000"
@@ -349,6 +340,7 @@ class PlayerClient:
         else:
             self.total_turn += 1
             action = self.try_all_blocks(board, start_time)
+            print(action)
             return action
 
     @staticmethod
