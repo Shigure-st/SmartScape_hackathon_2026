@@ -26,8 +26,8 @@ class PlayerClient:
         self.total_turn = 0
         # 手持ちのブロックリスト
         self.block_list = [
-            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-            'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
+            'A', 'B', 'C', 'H', 'E', 'D', 'M', 'J', 'I', 'G',
+            'F', 'Q', 'P', 'N', 'L', 'K', 'U', 'T', 'S', 'R', 'O'
         ]
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
@@ -50,7 +50,7 @@ class PlayerClient:
     def random_choice_block(self) -> str:
         """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
         try:
-            block = self.block_list.pop(random.randrange(len(self.block_list)))
+            block = self.block_list.pop()
         except Exception as e:
             print("ERROR:", e)
         else:
