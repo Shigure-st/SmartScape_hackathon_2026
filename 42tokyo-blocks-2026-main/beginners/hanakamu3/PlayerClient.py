@@ -51,8 +51,10 @@ class PlayerClient:
         # 手持ちのブロックリスト
         self.block_list = [
             ['U', 'R', 'T'],
-            ['S', 'Q', 'O', 'L'],
-            ['P', 'N', 'M', 'K'],
+            ['S', 'Q'],
+            ['O', 'L'],
+            ['P', 'N'],
+            ['M', 'K'],
             ['I', 'G'],
             ['J', 'F'],
             ['D', 'H', 'E'],
@@ -101,9 +103,6 @@ class PlayerClient:
                 else:
                     raise Exception
         return current_board
-
-    def change_padded_block_position(self, pos_x, pos_y, board_x, board_y, block_x, block_y):
-        return pos_y, board_y - (pos_y + block_y), pos_x, board_x - (pos_x + block_x)
 
     def check_placeable(self, board) -> np.ndarray:
         """現在のボードの状況をマッピングするメソッド"""
@@ -241,11 +240,13 @@ class PlayerClient:
         else:
             return block
 
-    def try_put_block(self, board, random_block, corner_list, target_corner_mask):
+    def try_put_block(self, board, random_block, corner_list, target_corner_mask, start_time):
         """選んだブロックを置けるかを確認し、次の一手を返すメソッド"""
         block_type = BlockType(random_block)
         next_action = [-1, "X000"]
 
+        current_time = time.time()
+        print(f"log({random_block}):", current_time - start_time)
         for y, x in corner_list:
             for rot, deltas in self.block_data[random_block].items():
                 for dx, dy in deltas:
@@ -259,11 +260,16 @@ class PlayerClient:
                         if board.can_place(self.player, padded_block):
                             action = f"{random_block}{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
                             eval_val = self.evaluate_next_action(padded_block, target_corner_mask)
+                            print("eval_val:", eval_val)
                             if next_action[0] < eval_val:
                                 next_action[0] = eval_val
                                 next_action[1] = action
                     except Exception:
                         continue
+
+        current_time = time.time()
+        print(next_action)
+        print(f"log({random_block}):", current_time - start_time)
 
         return next_action
 
@@ -299,20 +305,17 @@ class PlayerClient:
             for tier_index in block_list_index:
                 while len(self.block_list[tier_index]) != 0:
                     random_block = self.random_choice_block(tier_index)
-                    next_action = self.try_put_block(board, random_block, corner_batch, target_corner_mask)
+                    next_action = self.try_put_block(board, random_block, corner_batch, target_corner_mask, start_time)
                     if next_action[1] == "X000":
                         save.append(random_block)
-                        if len(self.block_list[tier_index]) == 0:
-                            self.block_list[tier_index].extend(save)
-                            break
                     else:
-                        self.block_list[tier_index].extend(save)
                         if action[0] < next_action[0]:
                             action[0] = next_action[0]
                             action[1] = next_action[1]
 
-            if action[0] > -1:
-                return action[1]
+                self.block_list[tier_index].extend(save)
+                if action[0] > -1:
+                    return action[1]
 
             self.non_used_count[tier_index] += 1
 
