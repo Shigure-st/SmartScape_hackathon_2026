@@ -5,6 +5,7 @@ import websockets
 import numpy as np
 import random
 import json
+import time
 
 from blocks_duo.Player import Player
 from blocks_duo.Player import Position
@@ -34,11 +35,20 @@ class PlayerClient:
         self.total_turn = 0
         # 手持ちのブロックリスト
         self.block_list = [
-            ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'],
-            ['E', 'F', 'G', 'H', 'I'],
-            ['C', 'D'],
-            ['A', 'B']
+            ['U', 'R', 'T'],
+            ['S', 'Q', 'O', 'L'],
+            ['P', 'N', 'M', 'K'],
+            ['I', 'G'],
+            ['J', 'F'],
+            ['D', 'H', 'E'],
+            ['C', 'B', 'A']
         ]
+        # self.block_list = [
+        #     ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'],
+        #     ['E', 'F', 'G', 'H', 'I'],
+        #     ['C', 'D'],
+        #     ['A', 'B']
+        # ]
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
         self.target = Player(-player_number + 3, "beginners", "target", socket)
@@ -189,9 +199,10 @@ class PlayerClient:
         }
 
         corner_dict = dict(sorted(corner_dict.items(), key=lambda x: x[1][0]))
-        sorted_corner_list.extend(center)
+        if is_attack_center:
+            sorted_corner_list.append(center)
         for area_corner in corner_dict.values():
-            sorted_corner_list.extend(area_corner[1])
+            sorted_corner_list.append(area_corner[1])
 
         return sorted_corner_list
 
@@ -235,33 +246,42 @@ class PlayerClient:
 
         return next_action
 
-    def try_all_blocks(self, given_board):
+    def try_all_blocks(self, given_board, start_time):
         """すべてのブロックを置けるか全探索"""
         # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
         board = self.generate_board(given_board)
+        current_time = time.time()
+        print("log(generate_board):", current_time - start_time)
         # 現在のボードの状況をマッピング
         placeable_mask, target_corner_mask = self.check_placeable(board)
+        current_time = time.time()
+        print("log(check_placeable):", current_time - start_time)
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
+        current_time = time.time()
+        print("log(get_corner_list):", current_time - start_time)
         # 優先して攻めるエリアの決定
         corner_list = self.select_attack_area(corner_list, placeable_mask)
+        current_time = time.time()
+        print("log(select_attack_area):", current_time - start_time)
         # 置けなかったブロックを保存しておくリスト
         save = []
 
         #while True:
-        for tier_num in range(len(self.block_list)):
-            while len(self.block_list[tier_num]) != 0:
-                random_block = self.random_choice_block(tier_num)
-                next_action = self.try_put_block(board, random_block, corner_list, target_corner_mask)
-                if next_action[1] == "X000":
-                    save.append(random_block)
-                    if len(self.block_list[tier_num]) == 0:
+        for corner_batch in corner_list:
+            for tier_num in range(len(self.block_list)):
+                while len(self.block_list[tier_num]) != 0:
+                    random_block = self.random_choice_block(tier_num)
+                    next_action = self.try_put_block(board, random_block, corner_batch, target_corner_mask)
+                    if next_action[1] == "X000":
+                        save.append(random_block)
+                        if len(self.block_list[tier_num]) == 0:
+                            self.block_list[tier_num].extend(save)
+                            break
+                    else:
                         self.block_list[tier_num].extend(save)
-                        break
-                else:
-                    self.block_list[tier_num].extend(save)
-                    print("next_action:", next_action)
-                    return next_action[1]
+                        print("next_action:", next_action)
+                        return next_action[1]
 
         return "X000"
 
@@ -270,6 +290,7 @@ class PlayerClient:
         action: str
         turn: int
 
+        start_time = time.time()
         # 一手目は指定して打つ
         if self.total_turn == 0:
             self.block_list[0].pop(-1)
@@ -280,7 +301,7 @@ class PlayerClient:
                 return "U089"
         else:
             self.total_turn += 1
-            return self.try_all_blocks(board)
+            return self.try_all_blocks(board, start_time)
 
     @staticmethod
     async def create(url: str, loop: asyncio.AbstractEventLoop) -> PlayerClient:
