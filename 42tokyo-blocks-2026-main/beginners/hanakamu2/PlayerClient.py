@@ -31,10 +31,18 @@ class PlayerClient:
         self.total_turn = 0
         # 手持ちのブロックリスト
         self.block_list = [
-            ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'],
-            ['E', 'F', 'G', 'H', 'I'],
-            ['C', 'D'],
-            ['A', 'B']
+            ['U'],
+            ['R', 'T'],
+            ['S', 'Q', 'O', 'L'],
+            ['P', 'N', 'M', 'K'],
+            ['I', 'G'],
+            ['J'],
+            ['F'],
+            ['D'],
+            ['H', 'E'],
+            ['C'],
+            ['B'],
+            ['A']
         ]
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
@@ -104,6 +112,13 @@ class PlayerClient:
 
         return corner_list
 
+    def squared_distance_from_center(self, start):
+        center = [7, 7]
+        return sum((x - y)**2 for x, y in zip(start, center))
+
+    def sort_corner_list(self, corner_list):
+        return sorted(corner_list, key=self.squared_distance_from_center)
+
     def get_zone_density(self, placeable_mask, zone):
         density = 0
         for y in range(7 * (zone & 2), 7 + 7 * (zone & 2)):
@@ -137,19 +152,22 @@ class PlayerClient:
     def try_put_block(self, board, random_block, corner_list):
         """選んだブロックを置けるかを確認し、次の一手を返すメソッド"""
         block_type = BlockType(random_block)
-        block_rotation = BlockRotation(0)
-        block = Block(block_type, block_rotation)
 
         for y, x in corner_list:
-            block_position = Position(x + 1, y + 1)
-            try:
-                board.assert_range(block, block_position)
-                padded_block = Board.PaddedBlock(board, block, block_position)
-                if board.can_place(self.player, padded_block):
-                    random_block += f"0{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
-                    return random_block
-            except Exception:
-                continue
+            for rot in range(8):
+                block_rotation = BlockRotation(0)
+                block = Block(block_type, block_rotation)
+                for dy in range(0, block.shape_y):
+                    for dx in range(0, block.shape_x):
+                        block_position = Position(x + 1 - dx, y + 1 - dy)
+                        try:
+                            board.assert_range(block, block_position)
+                            padded_block = Board.PaddedBlock(board, block, block_position)
+                            if board.can_place(self.player, padded_block):
+                                random_block += f"{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
+                                return random_block
+                        except Exception:
+                            continue
 
         return "X000"
 
@@ -161,11 +179,11 @@ class PlayerClient:
         placeable_mask = self.check_placeable(board)
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
+        corner_list = self.sort_corner_list(corner_list)
         # 置けなかったブロックを保存しておくリスト
         save = []
 
-        #while True:
-        for tier_num in range(len(block_list)):
+        for tier_num in range(len(self.block_list)):
             while len(self.block_list[tier_num]) != 0:
                 random_block = self.random_choice_block(tier_num)
                 next_action = self.try_put_block(board, random_block, corner_list)
