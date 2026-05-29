@@ -135,6 +135,24 @@ class PlayerClient:
 
         return my_corner_mask, target_corner_mask
 
+    def check_can_put(self, board) -> np.ndarray:
+        """現在のボードの状況をマッピングするメソッド"""
+        # それぞれのプレイヤーのブロック位置(bool)
+        my_blocks_mask = self.player_blocks(board.now_board(), self._player_number)
+        target_blocks_mask = self.player_blocks(board.now_board(), self._target_number)
+
+        # それぞれのプレイヤーのブロック位置
+        my_blocks_map = np.where(my_blocks_mask & (board.now_board() > 0), 1, 0)
+        target_blocks_map = np.where(target_blocks_mask & (board.now_board() > 0), 1, 0)
+
+        # それぞれのプレイヤーのブロックmapに一周０を追加
+        my_padded_board = np.pad(my_blocks_map, pad_width=1, mode='constant', constant_values=0)
+
+        # それぞれのプレイヤーのブロックとその横
+        my_side_blocks_map = convolve2d(my_padded_board, self.side_filter, mode='valid')
+
+        return my_side_blocks_map, target_blocks_map
+
     def get_corner_list(self, board, placeable_mask):
         """置くことができるブロックの角の座標のリストを返すメソッド"""
         corner_list = []
@@ -256,10 +274,14 @@ class PlayerClient:
                     block_position = Position(x + 1 - dx, y + 1 - dy)
                     try:
                         board.assert_range(block, block_position)
-                        padded_block = Board.PaddedBlock(board, block, block_position)
-                        if board.can_place(self.player, padded_block):
+                        my_padded_block = np.zeros((board.shape_y, board.shape_x), dtype=np.int64)
+                        my_padded_block[block_position.y: block_position.y + block.shape_y, block_position.x: block_position.x + block.shape_x] = block.block_map
+                        my_side_blocks_map, target_blocks_map = \
+                        self.check_can_put(board)
+                        if my_padded_block.flatten().dot(my_side_blocks_map.flatten()) == 0 \
+                        and my_padded_block.flatten().dot(target_blocks_map.flatten()) == 0:
                             action = f"{random_block}{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
-                            eval_val = self.evaluate_next_action(padded_block, target_corner_mask)
+                            eval_val = self.evaluate_next_action(my_padded_block, target_corner_mask)
                             print("eval_val:", eval_val)
                             if next_action[0] < eval_val:
                                 next_action[0] = eval_val
@@ -307,16 +329,13 @@ class PlayerClient:
 
                 self.block_list[tier_index].extend(save)
                 self.non_used_count[tier_index] += 1
-                if action[0] > -1:
+                current_time = time.time()
+                if action[0] > -1 or (current_time - start_time >= 13):
                     return action[1]
-
 
         return "X000"
 
     def create_action(self, board):
-        actions: list[str]
-        action: str
-        turn: int
 
         start_time = time.time()
         # 一手目は指定して打つ
@@ -329,7 +348,8 @@ class PlayerClient:
                 return "U089"
         else:
             self.total_turn += 1
-            return self.try_all_blocks(board, start_time)
+            action = self.try_all_blocks(board, start_time)
+            return action
 
     @staticmethod
     async def create(url: str, loop: asyncio.AbstractEventLoop) -> PlayerClient:
