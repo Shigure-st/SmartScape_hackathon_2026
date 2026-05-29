@@ -31,11 +31,14 @@ class PlayerClient:
         self.total_turn = 0
         # 手持ちのブロックリスト
         self.block_list = [
-            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-            'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'
+            ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'],
+            ['E', 'F', 'G', 'H', 'I'],
+            ['C', 'D'],
+            ['A', 'B']
         ]
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
+        self.target = Player(-player_number + 3, "beginners", "target", socket)
 
     @property
     def player_number(self) -> int:
@@ -122,10 +125,10 @@ class PlayerClient:
 
 # === Put Block === #
 
-    def random_choice_block(self) -> str:
+    def random_choice_block(self, tier_num) -> str:
         """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
         try:
-            block = self.block_list.pop(random.randrange(len(self.block_list)))
+            block = self.block_list[tier_num].pop(random.randrange(len(self.block_list[tier_num])))
         except Exception as e:
             print("ERROR:", e)
         else:
@@ -161,19 +164,21 @@ class PlayerClient:
         # 置けなかったブロックを保存しておくリスト
         save = []
 
-        while True:
-            random_block = self.random_choice_block()
-            next_action = self.try_put_block(board, random_block, corner_list)
-            if next_action == "X000":
-                save.append(random_block)
-                if len(self.block_list) == 0:
-                    self.block_list.extend(save)
-                    return "X000"
-            else:
-                self.block_list.extend(save)
-                if self.player_number == 2:
-                    print(f"next action 2: {next_action}")
-                return next_action
+        #while True:
+        for tier_num in range(len(block_list)):
+            while len(self.block_list[tier_num]) != 0:
+                random_block = self.random_choice_block(tier_num)
+                next_action = self.try_put_block(board, random_block, corner_list)
+                if next_action == "X000":
+                    save.append(random_block)
+                    if len(self.block_list[tier_num]) == 0:
+                        self.block_list[tier_num].extend(save)
+                        break
+                else:
+                    self.block_list[tier_num].extend(save)
+                    return next_action
+
+        return "X000"
 
     def create_action(self, board):
         actions: list[str]
@@ -182,7 +187,7 @@ class PlayerClient:
 
         # 一手目は指定して打つ
         if self.total_turn == 0:
-            self.block_list.pop(-1)
+            self.block_list[0].pop(-1)
             self.total_turn += 1
             if self.player_number == 1:
                 return "U034"
