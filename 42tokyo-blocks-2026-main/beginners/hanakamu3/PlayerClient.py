@@ -277,20 +277,12 @@ class PlayerClient:
         """すべてのブロックを置けるか全探索"""
         # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
         board = self.generate_board(given_board)
-        current_time = time.time()
-        print("log(generate_board):", current_time - start_time)
         # 現在のボードの状況をマッピング
         placeable_mask, target_corner_mask = self.check_placeable(board)
-        current_time = time.time()
-        print("log(check_placeable):", current_time - start_time)
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
-        current_time = time.time()
-        print("log(get_corner_list):", current_time - start_time)
         # 優先して攻めるエリアの決定
         corner_list = self.select_attack_area(corner_list, board)
-        current_time = time.time()
-        print("log(select_attack_area):", current_time - start_time)
         # 置けなかったブロックを保存しておくリスト
         save = []
 
@@ -314,10 +306,10 @@ class PlayerClient:
                             action[1] = next_action[1]
 
                 self.block_list[tier_index].extend(save)
+                self.non_used_count[tier_index] += 1
                 if action[0] > -1:
                     return action[1]
 
-            self.non_used_count[tier_index] += 1
 
         return "X000"
 
