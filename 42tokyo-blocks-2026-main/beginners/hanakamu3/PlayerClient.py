@@ -7,6 +7,8 @@ import random
 import json
 import time
 
+from scipy.signal import convolve2d
+
 from blocks_duo.Player import Player
 from blocks_duo.Player import Position
 from blocks_duo.Board import Board, EmptyChar, Player1Char, Player2Char
@@ -14,9 +16,7 @@ from blocks_duo.Block import Block
 from blocks_duo.BlockType import BlockType
 from blocks_duo.BlockRotation import BlockRotation
 
-BLOCK_COLLISION = 1
-BLOCK_EDGE = 2
-BLOCK_CORNER = 3
+BLOCK_CORNER = 1
 
 class BoardArea:
     TOP_LEFT = 0
@@ -32,7 +32,22 @@ class PlayerClient:
         self._loop = loop
         self._socket = socket
         self._player_number = player_number
+        self._target_number = -player_number + 3
         self.total_turn = 0
+        self.side_filter = np.array(
+            [
+                [0, 1, 0],
+                [1, 0, 1],
+                [0, 1, 0]
+            ]
+        )
+        self.corner_filter = np.array(
+            [
+                [1, 0, 1],
+                [0, 0, 0],
+                [1, 0, 1]
+            ]
+        )
         # 手持ちのブロックリスト
         self.block_list = [
             ['U', 'R', 'T'],
@@ -43,15 +58,10 @@ class PlayerClient:
             ['D', 'H', 'E'],
             ['C', 'B', 'A']
         ]
-        # self.block_list = [
-        #     ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U'],
-        #     ['E', 'F', 'G', 'H', 'I'],
-        #     ['C', 'D'],
-        #     ['A', 'B']
-        # ]
+        self.non_used_count = np.zeros((len(self.block_list), ), dtype=np.int64)
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
-        self.target = Player(-player_number + 3, "beginners", "target", socket)
+        self.target = Player(self._target_number, "beginners", "target", socket)
         with open("beginners/hanakamu3/block_loop.json", "r") as file:
             content = json.load(file)
         self.block_data = content
@@ -73,6 +83,9 @@ class PlayerClient:
 
 # === Board info === #
 
+    def player_blocks(self, board, player_number):
+        return board == player_number
+
     def generate_board(self, board) -> None:
         """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
         current_board = Board()
@@ -89,31 +102,39 @@ class PlayerClient:
                     raise Exception
         return current_board
 
+    def change_padded_block_position(self, pos_x, pos_y, board_x, board_y, block_x, block_y):
+        return pos_y, board_y - (pos_y + block_y), pos_x, board_x - (pos_x + block_x)
+
     def check_placeable(self, board) -> np.ndarray:
         """現在のボードの状況をマッピングするメソッド"""
-        placeable_mask = np.zeros((14, 14), dtype=np.int64)
-        target_corner_mask = np.zeros((14, 14), dtype=np.int64)
+        # それぞれのプレイヤーのブロック位置(bool)
+        my_blocks_mask = self.player_blocks(board.now_board(), self._player_number)
+        target_blocks_mask = self.player_blocks(board.now_board(), self._target_number)
 
-        for i in range(board.shape_x):
-            for j in range(board.shape_y):
-                padded_block = Board.PaddedBlock(
-                    board,
-                    Block(BlockType('A'), BlockRotation(0)),
-                    Position(i + 1, j + 1)
-                )
-                if board.detect_corner_connection(self.player, padded_block):
-                    placeable_mask[j][i] = BLOCK_CORNER
-                if board.detect_side_connection(self.player, padded_block):
-                    placeable_mask[j][i] = BLOCK_EDGE
-                if board.detect_collision(padded_block):
-                    placeable_mask[j][i] = BLOCK_COLLISION
-                else:
-                    if \
-                  not board.detect_side_connection(self.target, padded_block) \
-                  and board.detect_corner_connection(self.target, padded_block):
-                        target_corner_mask[j][i] = 1
+        # それぞれのプレイヤーのブロック位置
+        my_blocks_map = np.where(my_blocks_mask & (board.now_board() > 0), 1, 0)
+        target_blocks_map = np.where(target_blocks_mask & (board.now_board() > 0), 1, 0)
 
-        return placeable_mask, target_corner_mask
+        # それぞれのプレイヤーのブロックmapに一周０を追加
+        my_padded_board = np.pad(my_blocks_map, pad_width=1, mode='constant', constant_values=0)
+        target_padded_board = np.pad(target_blocks_map, pad_width=1, mode='constant', constant_values=0)
+
+        # それぞれのプレイヤーのブロックとその横
+        my_side_blocks_map = convolve2d(my_padded_board, self.side_filter, mode='valid')
+        target_side_blocks_map = convolve2d(target_padded_board, self.side_filter, mode='valid')
+
+        # それぞれのプレイヤーのブロックの横のみ
+        my_side_map = np.where((~my_blocks_mask) & (my_side_blocks_map > 0), 1, 0)
+        target_side_map = np.where((~target_blocks_mask) & (target_side_blocks_map > 0), 1, 0)
+
+        my_corner_blocks_map = convolve2d(my_padded_board, self.corner_filter, mode='valid')
+        target_corner_blocks_map = convolve2d(target_padded_board, self.corner_filter, mode='valid')
+
+        # それぞれのプレイヤーのブロックのcornerのみ
+        my_corner_mask = np.where((~my_blocks_mask) & (my_side_map == 0) & (my_corner_blocks_map > 0), 1, 0)
+        target_corner_mask = np.where((~target_blocks_mask) & (target_side_map == 0) & (target_corner_blocks_map > 0), 1, 0)
+
+        return my_corner_mask, target_corner_mask
 
     def get_corner_list(self, board, placeable_mask):
         """置くことができるブロックの角の座標のリストを返すメソッド"""
@@ -126,24 +147,24 @@ class PlayerClient:
 
         return corner_list
 
-    def get_zone_density(self, placeable_mask, zone):
+    def get_zone_density(self, board, zone):
         density = 0
         for y in range(7 * ((zone >> 1) & 2), 7 + 7 * ((zone >> 1) & 2)):
             for x in range(7 * (zone & 1), 7 + 7 * (zone & 1)):
-                if placeable_mask[y][x] == BLOCK_COLLISION or placeable_mask[y][x] == BLOCK_EDGE:
+                if board.now_board()[y][x] > 0:
                     density += 1
         return density / 49
 
-    def get_center_density(self, placeable_mask):
+    def get_center_density(self, board):
         density = 0
         for x in range(4, 10):
             for y in range(4, 10):
-                if placeable_mask[y][x] == BLOCK_COLLISION or placeable_mask[y][x] == BLOCK_EDGE:
+                if board.now_board()[y][x] > 0:
                     density += 1
         return density / 36
 
-    def attack_center(self, placeable_mask) -> bool:
-        return 0.6 > self.get_center_density(placeable_mask)
+    def attack_center(self, board) -> bool:
+        return 0.6 > self.get_center_density(board)
 
     def sort_corner_group(self, corner_pos, is_attack_center):
         if corner_pos[0] < 7 and corner_pos[1] < 7:
@@ -163,7 +184,7 @@ class PlayerClient:
                 return BoardArea.CENTER
             return BoardArea.BOTTOM_RIGHT
 
-    def select_attack_area(self, corner_list, placeable_mask):
+    def select_attack_area(self, corner_list, board):
         center = []
         top_left = []
         top_right = []
@@ -172,7 +193,7 @@ class PlayerClient:
 
         sorted_corner_list = []
 
-        is_attack_center = self.attack_center(placeable_mask)
+        is_attack_center = self.attack_center(board)
         for curr_list in corner_list:
             match self.sort_corner_group(curr_list, is_attack_center):
                 case BoardArea.TOP_LEFT:
@@ -186,10 +207,10 @@ class PlayerClient:
                 case _:
                     center.append(curr_list)
 
-        top_left_density = self.get_zone_density(placeable_mask, BoardArea.TOP_LEFT)
-        top_right_density = self.get_zone_density(placeable_mask, BoardArea.TOP_RIGHT)
-        bottom_left_density = self.get_zone_density(placeable_mask, BoardArea.BOTTOM_LEFT)
-        bottom_right_density = self.get_zone_density(placeable_mask, BoardArea.BOTTOM_RIGHT)
+        top_left_density = self.get_zone_density(board, BoardArea.TOP_LEFT)
+        top_right_density = self.get_zone_density(board,BoardArea.TOP_RIGHT)
+        bottom_left_density = self.get_zone_density(board, BoardArea.BOTTOM_LEFT)
+        bottom_right_density = self.get_zone_density(board, BoardArea.BOTTOM_RIGHT)
 
         corner_dict = {
             BoardArea.TOP_LEFT: [top_left_density, top_left],
@@ -211,10 +232,10 @@ class PlayerClient:
 
 # === Put Block === #
 
-    def random_choice_block(self, tier_num) -> str:
+    def random_choice_block(self, tier_index) -> str:
         """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
         try:
-            block = self.block_list[tier_num].pop(random.randrange(len(self.block_list[tier_num])))
+            block = self.block_list[tier_index].pop(random.randrange(len(self.block_list[tier_index])))
         except Exception as e:
             print("ERROR:", e)
         else:
@@ -261,27 +282,39 @@ class PlayerClient:
         current_time = time.time()
         print("log(get_corner_list):", current_time - start_time)
         # 優先して攻めるエリアの決定
-        corner_list = self.select_attack_area(corner_list, placeable_mask)
+        corner_list = self.select_attack_area(corner_list, board)
         current_time = time.time()
         print("log(select_attack_area):", current_time - start_time)
         # 置けなかったブロックを保存しておくリスト
         save = []
 
-        #while True:
+        action = [-1, "X000"]
+        self.non_used_count = np.zeros((len(self.block_list), ), dtype=np.int64)
+        block_list_index = \
+            [idx for idx, count \
+                 in zip(range(len(self.block_list)), self.non_used_count) \
+                 if count < 3]
+
         for corner_batch in corner_list:
-            for tier_num in range(len(self.block_list)):
-                while len(self.block_list[tier_num]) != 0:
-                    random_block = self.random_choice_block(tier_num)
+            for tier_index in block_list_index:
+                while len(self.block_list[tier_index]) != 0:
+                    random_block = self.random_choice_block(tier_index)
                     next_action = self.try_put_block(board, random_block, corner_batch, target_corner_mask)
                     if next_action[1] == "X000":
                         save.append(random_block)
-                        if len(self.block_list[tier_num]) == 0:
-                            self.block_list[tier_num].extend(save)
+                        if len(self.block_list[tier_index]) == 0:
+                            self.block_list[tier_index].extend(save)
                             break
                     else:
-                        self.block_list[tier_num].extend(save)
-                        print("next_action:", next_action)
-                        return next_action[1]
+                        self.block_list[tier_index].extend(save)
+                        if action[0] < next_action[0]:
+                            action[0] = next_action[0]
+                            action[1] = next_action[1]
+
+            if action[0] > -1:
+                return action[1]
+
+            self.non_used_count[tier_index] += 1
 
         return "X000"
 
@@ -293,7 +326,7 @@ class PlayerClient:
         start_time = time.time()
         # 一手目は指定して打つ
         if self.total_turn == 0:
-            self.block_list[0].pop(-1)
+            self.block_list[0].pop(0)
             self.total_turn += 1
             if self.player_number == 1:
                 return "U034"
