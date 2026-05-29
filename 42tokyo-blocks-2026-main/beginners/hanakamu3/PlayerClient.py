@@ -4,6 +4,7 @@ from re import U
 import websockets
 import numpy as np
 import random
+import json
 
 from blocks_duo.Player import Player
 from blocks_duo.Player import Position
@@ -41,6 +42,9 @@ class PlayerClient:
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
         self.target = Player(-player_number + 3, "beginners", "target", socket)
+        with open("beginners/hanakamu3/block_loop.json", "r") as file:
+            content = json.load(file)
+        self.block_data = content
 
     @property
     def player_number(self) -> int:
@@ -78,6 +82,7 @@ class PlayerClient:
     def check_placeable(self, board) -> np.ndarray:
         """現在のボードの状況をマッピングするメソッド"""
         placeable_mask = np.zeros((14, 14), dtype=np.int64)
+        target_corner_mask = np.zeros((14, 14), dtype=np.int64)
 
         for i in range(board.shape_x):
             for j in range(board.shape_y):
@@ -86,14 +91,19 @@ class PlayerClient:
                     Block(BlockType('A'), BlockRotation(0)),
                     Position(i + 1, j + 1)
                 )
+                if board.detect_corner_connection(self.player, padded_block):
+                    placeable_mask[j][i] = BLOCK_CORNER
                 if board.detect_side_connection(self.player, padded_block):
                     placeable_mask[j][i] = BLOCK_EDGE
                 if board.detect_collision(padded_block):
                     placeable_mask[j][i] = BLOCK_COLLISION
-                if board.can_place(self.player, padded_block):
-                    placeable_mask[j][i] = BLOCK_CORNER
+                else:
+                    if \
+                  not board.detect_side_connection(self.target, padded_block) \
+                  and board.detect_corner_connection(self.target, padded_block):
+                        target_corner_mask[j][i] = 1
 
-        return placeable_mask
+        return placeable_mask, target_corner_mask
 
     def get_corner_list(self, board, placeable_mask):
         """置くことができるブロックの角の座標のリストを返すメソッド"""
@@ -183,9 +193,10 @@ class PlayerClient:
         for area_corner in corner_dict.values():
             sorted_corner_list.extend(area_corner[1])
 
-        print("sorted_corner_list:", sorted_corner_list)
-
         return sorted_corner_list
+
+    def evaluate_next_action(self, padded_block, target_corner_mask):
+        return padded_block.block_map.flatten().dot(target_corner_mask.flatten())
 
 # === Put Block === #
 
@@ -198,34 +209,38 @@ class PlayerClient:
         else:
             return block
 
-    def try_put_block(self, board, random_block, corner_list):
+    def try_put_block(self, board, random_block, corner_list, target_corner_mask):
         """選んだブロックを置けるかを確認し、次の一手を返すメソッド"""
         block_type = BlockType(random_block)
+        next_action = [-1, "X000"]
 
         for y, x in corner_list:
-            for rot in range(8):
-                block_rotation = BlockRotation(0)
-                block = Block(block_type, block_rotation)
-                for dy in range(0, block.shape_y):
-                    for dx in range(0, block.shape_x):
-                        block_position = Position(x + 1 - dx, y + 1 - dy)
-                        try:
-                            board.assert_range(block, block_position)
-                            padded_block = Board.PaddedBlock(board, block, block_position)
-                            if board.can_place(self.player, padded_block):
-                                random_block += f"{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
-                                return random_block
-                        except Exception:
-                            continue
+            for rot, deltas in self.block_data[random_block].items():
+                for dx, dy in deltas:
+                    rot = int(rot)
+                    block_rotation = BlockRotation(rot)
+                    block = Block(block_type, block_rotation)
+                    block_position = Position(x + 1 - dx, y + 1 - dy)
+                    try:
+                        board.assert_range(block, block_position)
+                        padded_block = Board.PaddedBlock(board, block, block_position)
+                        if board.can_place(self.player, padded_block):
+                            action = f"{random_block}{rot}{str(hex(x + 1 - dx))[2:]}{str(hex(y + 1 - dy))[2:]}"
+                            eval_val = self.evaluate_next_action(padded_block, target_corner_mask)
+                            if next_action[0] < eval_val:
+                                next_action[0] = eval_val
+                                next_action[1] = action
+                    except Exception:
+                        continue
 
-        return "X000"
+        return next_action
 
     def try_all_blocks(self, given_board):
         """すべてのブロックを置けるか全探索"""
         # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
         board = self.generate_board(given_board)
         # 現在のボードの状況をマッピング
-        placeable_mask = self.check_placeable(board)
+        placeable_mask, target_corner_mask = self.check_placeable(board)
         # 現在のボードの状況をマッピング
         corner_list = self.get_corner_list(board, placeable_mask)
         # 優先して攻めるエリアの決定
@@ -237,15 +252,16 @@ class PlayerClient:
         for tier_num in range(len(self.block_list)):
             while len(self.block_list[tier_num]) != 0:
                 random_block = self.random_choice_block(tier_num)
-                next_action = self.try_put_block(board, random_block, corner_list)
-                if next_action == "X000":
+                next_action = self.try_put_block(board, random_block, corner_list, target_corner_mask)
+                if next_action[1] == "X000":
                     save.append(random_block)
                     if len(self.block_list[tier_num]) == 0:
                         self.block_list[tier_num].extend(save)
                         break
                 else:
                     self.block_list[tier_num].extend(save)
-                    return next_action
+                    print("next_action:", next_action)
+                    return next_action[1]
 
         return "X000"
 
