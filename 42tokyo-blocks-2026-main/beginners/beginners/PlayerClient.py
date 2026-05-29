@@ -143,8 +143,6 @@ class PlayerClient:
                     return "X000"
             else:
                 self.block_list.extend(save)
-                if self.player_number == 2:
-                    print(f"next action 2: {next_action}")
                 return next_action
 
     def create_action(self, board):

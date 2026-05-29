@@ -44,6 +44,7 @@ class PlayerClient:
             ['B'],
             ['A']
         ]
+        self.non_used_block = np.zeros((len(self.block_list), ), dtype=np.int64)
         # Boardのメソッドを活用するために使用
         self.player = Player(player_number, "target", "beginners", socket)
         self.target = Player(-player_number + 3, "beginners", "target", socket)
@@ -140,10 +141,10 @@ class PlayerClient:
 
 # === Put Block === #
 
-    def random_choice_block(self, tier_num) -> str:
+    def random_choice_block(self, tier_index) -> str:
         """手持ちのブロックリストからランダムに一つ選ぶメソッド."""
         try:
-            block = self.block_list[tier_num].pop(random.randrange(len(self.block_list[tier_num])))
+            block = self.block_list[tier_index].pop(random.randrange(len(self.block_list[tier_index])))
         except Exception as e:
             print("ERROR:", e)
         else:
@@ -183,18 +184,23 @@ class PlayerClient:
         # 置けなかったブロックを保存しておくリスト
         save = []
 
-        for tier_num in range(len(self.block_list)):
-            while len(self.block_list[tier_num]) != 0:
-                random_block = self.random_choice_block(tier_num)
+        use_block = [idx for idx, mask in zip(range(len(self.block_list)), self.non_used_block) if mask < 2]
+
+        # for tier_index in range(len(self.block_list)):
+        for tier_index in use_block:
+            while len(self.block_list[tier_index]) != 0:
+                random_block = self.random_choice_block(tier_index)
                 next_action = self.try_put_block(board, random_block, corner_list)
                 if next_action == "X000":
                     save.append(random_block)
-                    if len(self.block_list[tier_num]) == 0:
-                        self.block_list[tier_num].extend(save)
+                    if len(self.block_list[tier_index]) == 0:
+                        self.block_list[tier_index].extend(save)
                         break
                 else:
-                    self.block_list[tier_num].extend(save)
+                    self.block_list[tier_index].extend(save)
                     return next_action
+
+            self.non_used_block[tier_index] += 1
 
         return "X000"
 
