@@ -599,7 +599,7 @@ class PlayerClient:
                             elif algo == "enomoto":
                                 e_games += 1
                                 if res == "WIN": e_wins += 1
-                
+
                 if h_games > 0: hanakamu_weight = max(0.1, h_wins / h_games)
                 if e_games > 0: enomoto_weight = max(0.1, e_wins / e_games)
 
@@ -607,11 +607,10 @@ class PlayerClient:
             self.selected_algo = random.choices(["hanakamu", "enomoto"], weights=[hanakamu_weight, enomoto_weight])[0]
             with open(curr_algo_path, 'w') as f:
                 f.write(self.selected_algo)
-            
+
             # 履歴のリセット
             with open(self.history_path, 'w') as f: pass
 
-        self.selected_algo = "hanakamu"
         if self.selected_algo == "hanakamu":
             start_time = time.time()
             # 一手目は指定して打つ
