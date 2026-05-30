@@ -109,6 +109,10 @@ class PlayerClient:
     def player_number(self) -> int:
         return self._player_number
 
+    @property
+    def target_number(self) -> int:
+        return self._target_number
+
     async def close(self):
         await self._socket.close()
 
@@ -122,8 +126,41 @@ class PlayerClient:
 
 # === Board info === #
 
-    def player_blocks(self, board, player_number):
-        return board == player_number
+    def player_blocks_map(self, board: Board, player_number):
+        return np.where(board.now_board() == player_number, 1, 0)
+
+    def player_blocks_and_sides_map(self, board: Board, player_number):
+        blocks_map = self.player_blocks_map(board, player_number)
+        padded_board = np.pad(blocks_map, pad_width=1,
+                              mode='constant', constant_values=0)
+        blocks_sides_map = convolve2d(padded_board, self.side_filter,
+                                      mode='valid')
+        return np.where(blocks_sides_map > 0, 1, 0)
+
+    def player_side_map(self, board: Board, player_number):
+        blocks_map = self.player_blocks_map(board, player_number)
+        padded_board = np.pad(blocks_map, pad_width=1,
+                              mode='constant', constant_values=0)
+        blocks_sides_map = np.where(convolve2d(padded_board, self.side_filter,
+                                      mode='valid') > 0, 1, 0)
+        return blocks_sides_map - blocks_map
+
+    def player_corner_map(self, board: Board, player_number):
+        blocks_map = self.player_blocks_map(board, player_number)
+        padded_board = np.pad(blocks_map, pad_width=1,
+                              mode='constant', constant_values=0)
+        blocks_sides_map = self.player_blocks_and_sides_map(board,
+                                                            player_number)
+        corner_map = convolve2d(padded_board, self.corner_filter, mode='valid')
+
+        return np.where((blocks_sides_map == 0) & (corner_map > 0), 1, 0)
+
+    def padded_block_map(self, board: Board, block: Block, position: Position):
+        padded_block = np.zeros((board.shape_y, board.shape_x), dtype=np.int64)
+        padded_block[position.y: position.y + block.shape_y, \
+                     position.x: position.x + block.shape_x] = block.block_map
+
+        return padded_block
 
     def generate_board(self, board) -> None:
         """strで受け取ったboardをnumpy二次元配列に変換するメソッド."""
@@ -140,55 +177,6 @@ class PlayerClient:
                 else:
                     raise Exception
         return current_board
-
-    def check_placeable(self, board) -> np.ndarray:
-        """現在のボードの状況をマッピングするメソッド"""
-        # それぞれのプレイヤーのブロック位置(bool)
-        my_blocks_mask = self.player_blocks(board.now_board(), self._player_number)
-        target_blocks_mask = self.player_blocks(board.now_board(), self._target_number)
-
-        # それぞれのプレイヤーのブロック位置
-        my_blocks_map = np.where(my_blocks_mask & (board.now_board() > 0), 1, 0)
-        target_blocks_map = np.where(target_blocks_mask & (board.now_board() > 0), 1, 0)
-
-        # それぞれのプレイヤーのブロックmapに一周０を追加
-        my_padded_board = np.pad(my_blocks_map, pad_width=1, mode='constant', constant_values=0)
-        target_padded_board = np.pad(target_blocks_map, pad_width=1, mode='constant', constant_values=0)
-
-        # それぞれのプレイヤーのブロックとその横
-        my_side_blocks_map = convolve2d(my_padded_board, self.side_filter, mode='valid')
-        target_side_blocks_map = convolve2d(target_padded_board, self.side_filter, mode='valid')
-
-        # それぞれのプレイヤーのブロックの横のみ
-        my_side_map = np.where((~my_blocks_mask) & (my_side_blocks_map > 0), 1, 0)
-        target_side_map = np.where((~target_blocks_mask) & (target_side_blocks_map > 0), 1, 0)
-
-        my_corner_blocks_map = convolve2d(my_padded_board, self.corner_filter, mode='valid')
-        target_corner_blocks_map = convolve2d(target_padded_board, self.corner_filter, mode='valid')
-
-        # それぞれのプレイヤーのブロックのcornerのみ
-        my_corner_mask = np.where((~my_blocks_mask) & (my_side_map == 0) & (my_corner_blocks_map > 0), 1, 0)
-        target_corner_mask = np.where((~target_blocks_mask) & (target_side_map == 0) & (target_corner_blocks_map > 0), 1, 0)
-
-        return my_corner_mask, target_corner_mask
-
-    def check_can_put(self, board) -> np.ndarray:
-        """現在のボードの状況をマッピングするメソッド"""
-        # それぞれのプレイヤーのブロック位置(bool)
-        my_blocks_mask = self.player_blocks(board.now_board(), self._player_number)
-        target_blocks_mask = self.player_blocks(board.now_board(), self._target_number)
-
-        # それぞれのプレイヤーのブロック位置
-        my_blocks_map = np.where(my_blocks_mask & (board.now_board() > 0), 1, 0)
-        target_blocks_map = np.where(target_blocks_mask & (board.now_board() > 0), 1, 0)
-
-        # それぞれのプレイヤーのブロックmapに一周０を追加
-        my_padded_board = np.pad(my_blocks_map, pad_width=1, mode='constant', constant_values=0)
-
-        # それぞれのプレイヤーのブロックとその横
-        my_side_blocks_map = convolve2d(my_padded_board, self.side_filter, mode='valid')
-
-        return my_side_blocks_map, target_blocks_map
 
     def get_corner_list(self, board, placeable_mask):
         """置くことができるブロックの角の座標のリストを返すメソッド"""
@@ -310,15 +298,22 @@ class PlayerClient:
                     block_position = Position(x + 1 - dx, y + 1 - dy)
                     try:
                         board.assert_range(block, block_position)
-                        my_padded_block = np.zeros((board.shape_y, board.shape_x), dtype=np.int64)
-                        my_padded_block[block_position.y: block_position.y + block.shape_y, \
-                         block_position.x: block_position.x + block.shape_x] = block.block_map
-                        my_side_blocks_map, target_blocks_map = \
-                        self.check_can_put(board)
-                        if my_padded_block.flatten().dot(my_side_blocks_map.flatten()) == 0 \
-                        and my_padded_block.flatten().dot(target_blocks_map.flatten()) == 0:
-                            action = f"{random_block}{rot}{str(hex(block_position.x + 1))[2:]}{str(hex(block_position.y + 1))[2:]}"
-                            eval_val = self.evaluate_next_action(my_padded_block, target_corner_mask)
+                        padded_block = self.padded_block_map(
+                                board, block, block_position)
+                        my_blocks_sides_map = self.player_blocks_and_sides_map(
+                                board, self.player_number)
+                        target_blocks_map = self.player_blocks_map(
+                                board, self.target_number)
+                        if padded_block.flatten().dot(
+                                my_blocks_sides_map.flatten()) == 0 \
+                        and padded_block.flatten().dot(
+                                target_blocks_map.flatten()) == 0:
+                            action = f"{random_block}"\
+                                     f"{rot}"\
+                                     f"{str(hex(block_position.x + 1))[2:]}"\
+                                     f"{str(hex(block_position.y + 1))[2:]}"
+                            eval_val = self.evaluate_next_action(padded_block,
+                                target_corner_mask)
                             if next_action[0] < eval_val:
                                 next_action[0] = eval_val
                                 next_action[1] = action
@@ -329,14 +324,17 @@ class PlayerClient:
 
         return next_action
 
-    def try_all_blocks(self, given_board, start_time):
+    def try_all_blocks(self, current_board, start_time):
         """すべてのブロックを置けるか全探索"""
         # 現在のボードの状況をコピーしたBoardクラスのインスタンスを作成
-        board = self.generate_board(given_board)
+        board = self.generate_board(current_board)
         # 現在のボードの状況をマッピング
-        placeable_mask, target_corner_mask = self.check_placeable(board)
+        my_corner_map = self.player_corner_map(board,
+                                               self.player_number)
+        target_corner_map = self.player_corner_map(board,
+                                               self.target_number)
         # 現在のボードの状況をマッピング
-        corner_list = self.get_corner_list(board, placeable_mask)
+        corner_list = self.get_corner_list(board, my_corner_map)
         # 優先して攻めるエリアの決定
         corner_list = self.select_attack_area(corner_list, board)
 
@@ -350,7 +348,8 @@ class PlayerClient:
         for corner_batch in corner_list:
             for tier_index in block_list_index:
                 for random_block in self.block_list[tier_index]:
-                    next_action = self.try_put_block(board, random_block, corner_batch, target_corner_mask, start_time)
+                    next_action = self.try_put_block(board, random_block,
+                        corner_batch, target_corner_map, start_time)
                     if next_action[0] > -1 and action[0] < next_action[0]:
                         action = next_action
 
@@ -405,55 +404,75 @@ class PlayerClient:
 # ============================================================================
 # ============================================================================
 
-    def eno_check_placeable(self, board):
+    def eno_check_placeable(self, board: Board):
         """現在のボードの状況をマッピングするメソッド"""
-        placeable_mask = np.zeros((14, 14), dtype=np.int64)
-        enemy_placeable_mask = np.zeros((14, 14), dtype=np.int64)
+        # placeable_mask = np.zeros((14, 14), dtype=np.int64)
+        # enemy_placeable_mask = np.zeros((14, 14), dtype=np.int64)
 
-        for i in range(board.shape_x):
-            for j in range(board.shape_y):
-                # start = time.time()
-                padded_block = Board.PaddedBlock(
-                    board,
-                    Block(BlockType('A'), BlockRotation(0)),
-                    Position(i + 1, j + 1)
-                )
-                # print("TIME aaa:", (time.time()) - start)
-                if board.detect_side_connection(self.player, padded_block):
-                    placeable_mask[j][i] = BLOCK_EDGE
-                if board.detect_collision(padded_block):
-                    placeable_mask[j][i] = BLOCK_COLLISION
-                if board.can_place(self.player, padded_block):
-                    placeable_mask[j][i] = BLOCK_CORNER
+        # for i in range(board.shape_x):
+        #     for j in range(board.shape_y):
+        #         # start = time.time()
+        #         padded_block = Board.PaddedBlock(
+        #             board,
+        #             Block(BlockType('A'), BlockRotation(0)),
+        #             Position(i + 1, j + 1)
+        #         )
+        #         # print("TIME aaa:", (time.time()) - start)
+        #         if board.detect_side_connection(self.player, padded_block):
+        #             placeable_mask[j][i] = BLOCK_EDGE
+        #         if board.detect_collision(padded_block):
+        #             placeable_mask[j][i] = BLOCK_COLLISION
+        #         if board.can_place(self.player, padded_block):
+        #             placeable_mask[j][i] = BLOCK_CORNER
 
-                if board.detect_side_connection(self.enemy_player, padded_block):
-                    enemy_placeable_mask[j][i] = BLOCK_EDGE
-                if board.detect_collision(padded_block):
-                    enemy_placeable_mask[j][i] = BLOCK_COLLISION
-                if board.can_place(self.enemy_player, padded_block):
-                    enemy_placeable_mask[j][i] = BLOCK_CORNER
+        #         if board.detect_side_connection(self.enemy_player, padded_block):
+        #             enemy_placeable_mask[j][i] = BLOCK_EDGE
+        #         if board.detect_collision(padded_block):
+        #             enemy_placeable_mask[j][i] = BLOCK_COLLISION
+        #         if board.can_place(self.enemy_player, padded_block):
+        #             enemy_placeable_mask[j][i] = BLOCK_CORNER
+
+        block_map = self.player_blocks_map(board, self.player_number)
+        enemy_block_map = self.player_blocks_map(board,
+            self.enemy_player.player_number)
+
+        side_map = self.player_side_map(board, self.player_number)
+        enemy_side_map = self.player_side_map(board,
+            self.enemy_player.player_number)
+
+        corner_map = self.player_corner_map(board, self.player_number)
+        enemy_corner_map = self.player_corner_map(board,
+            self.enemy_player.player_number)
+
+        placeable_mask = block_map + enemy_block_map \
+            + np.where(side_map == 1, BLOCK_EDGE, 0) \
+            + np.where(corner_map == 1, BLOCK_CORNER, 0)
+        enemy_placeable_mask = block_map + enemy_block_map \
+            + np.where(enemy_side_map == 1, BLOCK_EDGE, 0) \
+            + np.where(enemy_corner_map == 1, BLOCK_CORNER, 0)
 
         return placeable_mask, enemy_placeable_mask
 
-    def enemy_placeable(self, board) -> np.ndarray:
-        """相手のボードの状況をマッピングするメソッド"""
-        enemy_placeable_mask = np.zeros((14, 14), dtype=np.int64)
+    # def enemy_placeable(self, board) -> np.ndarray:
+    #     """相手のボードの状況をマッピングするメソッド"""
+    #     enemy_placeable_mask = np.zeros((14, 14), dtype=np.int64)
 
-        for i in range(board.shape_x):
-            for j in range(board.shape_y):
-                padded_block = Board.PaddedBlock(
-                    board,
-                    Block(BlockType('A'), BlockRotation(0)),
-                    Position(i + 1, j + 1)
-                )
+    #     for i in range(board.shape_x):
+    #         for j in range(board.shape_y):
+    #             padded_block = Board.PaddedBlock(
+    #                 board,
+    #                 Block(BlockType('A'), BlockRotation(0)),
+    #                 Position(i + 1, j + 1)
+    #             )
 
-                if board.detect_side_connection(self.enemy_player, padded_block):
-                    enemy_placeable_mask[j][i] = BLOCK_EDGE
-                if board.detect_collision(padded_block):
-                    enemy_placeable_mask[j][i] = BLOCK_COLLISION
-                if board.can_place(self.enemy_player, padded_block):
-                    enemy_placeable_mask[j][i] = BLOCK_CORNER
-        return enemy_placeable_mask
+    #             if board.detect_side_connection(self.enemy_player, padded_block):
+    #                 enemy_placeable_mask[j][i] = BLOCK_EDGE
+    #             if board.detect_collision(padded_block):
+    #                 enemy_placeable_mask[j][i] = BLOCK_COLLISION
+    #             if board.can_place(self.enemy_player, padded_block):
+    #                 enemy_placeable_mask[j][i] = BLOCK_CORNER
+
+    #     return enemy_placeable_mask
 
     def get_enemy_corner_list(self, board, enemy_placeable_mask) -> list[list[int, int]]:
         """相手が置くことができるブロックの角の座標のリストを返すメソッド"""
@@ -491,10 +510,24 @@ class PlayerClient:
 
                 for y, x in corner_list:
                     block_position = Position(x + 1, y + 1)
+                    if block.block_map[0][0] == 0:
+                        continue
                     try:
                         board.assert_range(block, block_position)
-                        padded_block = Board.PaddedBlock(board, block, block_position)
-                        if board.can_place(self.player, padded_block):
+                        # padded_block = Board.PaddedBlock(board, block, block_position)
+                        # if board.can_place(self.player, padded_block):
+
+                        padded_block = self.padded_block_map(
+                                board, block, block_position)
+                        blocks_sides_map = self.player_blocks_and_sides_map(
+                                board, self.player_number)
+                        enemy_blocks_map = self.player_blocks_map(
+                                board, self.enemy_player.player_number)
+                        if padded_block.flatten().dot(
+                                blocks_sides_map.flatten()) == 0 \
+                        and padded_block.flatten().dot(
+                                enemy_blocks_map.flatten()) == 0:
+
                             tmp_string = tier_block
                             tmp_string += f"{i}{str(hex(x + 1))[2:]}{str(hex(y + 1))[2:]}"
                             next_action_dict[tmp_string] = self.get_available_block_count(board, padded_block)
@@ -620,7 +653,7 @@ class PlayerClient:
                             elif algo == "enomoto":
                                 e_games += 1
                                 if res == "WIN": e_wins += 1
-                
+
                 if h_games > 0: hanakamu_weight = max(0.1, h_wins / h_games)
                 if e_games > 0: enomoto_weight = max(0.1, e_wins / e_games)
 
@@ -628,7 +661,7 @@ class PlayerClient:
             self.selected_algo = random.choices(["hanakamu", "enomoto"], weights=[hanakamu_weight, enomoto_weight])[0]
             with open(curr_algo_path, 'w') as f:
                 f.write(self.selected_algo)
-            
+
             # 履歴のリセット
             with open(self.history_path, 'w') as f: pass
 
