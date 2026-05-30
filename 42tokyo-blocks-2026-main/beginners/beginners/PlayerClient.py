@@ -329,7 +329,8 @@ class PlayerClient:
         for corner_batch in corner_list:
             for tier_index in block_list_index:
                 for random_block in self.block_list[tier_index]:
-                    next_action = self.try_put_block(board, random_block, corner_batch, target_corner_map, start_time)
+                    next_action = self.try_put_block(board, random_block,
+                        corner_batch, target_corner_map, start_time)
                     if next_action[0] > -1 and action[0] < next_action[0]:
                         action = next_action
 
